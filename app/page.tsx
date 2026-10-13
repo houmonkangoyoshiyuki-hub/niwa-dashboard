@@ -169,42 +169,57 @@ function ProfitDonut({ deals }: { deals: Deal[] }) {
 }
 
 function ProfitBars({ deals }: { deals: Deal[] }) {
-  // 直近6ヶ月の確定利益
   const now = new Date()
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
     return { label: `${d.getMonth() + 1}月`, year: d.getFullYear(), month: d.getMonth() }
   })
-  const profits = months.map(m => {
-    const sum = deals
-      .filter(d => (d.status === '完了' || d.status === 'done') && d.created_at)
-      .filter(d => {
-        const dt = new Date(d.created_at)
-        return dt.getFullYear() === m.year && dt.getMonth() === m.month
-      })
-      .reduce((s, d) => s + (d.sell_price - d.buy_price), 0)
-    return { ...m, profit: sum }
+  // 粗利から固定コスト(¥11,000)と課税(標準40%)を差し引いた手取り近似
+  const netApprox = (d: Deal) => {
+    const fixedCost = 11000 + Math.round(d.buy_price * 0.1)
+    const tax = Math.round(d.sell_price * 0.4)
+    return d.sell_price - tax - fixedCost - d.buy_price
+  }
+  const data = months.map(m => {
+    const inMonth = (d: Deal) => {
+      const dt = new Date(d.created_at)
+      return dt.getFullYear() === m.year && dt.getMonth() === m.month
+    }
+    const confirmed = deals.filter(d => (d.status === '完了' || d.status === 'done') && d.created_at && inMonth(d))
+      .reduce((s, d) => s + Math.max(0, netApprox(d)), 0)
+    const pending = deals.filter(d => d.status !== '完了' && d.status !== 'done' && d.created_at && inMonth(d))
+      .reduce((s, d) => s + Math.max(0, netApprox(d)), 0)
+    return { ...m, confirmed, pending }
   })
-  const maxP = Math.max(...profits.map(p => p.profit), 1)
+  const maxP = Math.max(...data.map(d => d.confirmed + d.pending), 1)
   const barW = 28, gap = 8, totalW = (barW + gap) * 6 - gap, svgH = 80
 
   return (
     <div>
-      <div className="text-xs text-slate-500 mb-2">月別確定利益（直近6ヶ月）</div>
+      <div className="flex items-center gap-3 text-[10px] mb-2">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-400 inline-block"/>確定利益</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400 inline-block"/>見込み利益</span>
+        <span className="text-slate-600 ml-auto">※手取り概算</span>
+      </div>
       <svg width="100%" viewBox={`0 0 ${totalW} ${svgH + 20}`} style={{ overflow: 'visible' }}>
-        {profits.map((p, i) => {
-          const barH = p.profit > 0 ? Math.max(4, (p.profit / maxP) * svgH) : 2
+        {data.map((d, i) => {
+          const confH = d.confirmed > 0 ? Math.max(3, (d.confirmed / maxP) * svgH) : 0
+          const pendH = d.pending > 0 ? Math.max(3, (d.pending / maxP) * svgH) : 0
+          const totalH = confH + pendH || 2
           const x = i * (barW + gap)
+          const total = d.confirmed + d.pending
           return (
             <g key={i}>
-              <rect x={x} y={svgH - barH} width={barW} height={barH}
-                rx={4}
-                fill={p.profit > 0 ? '#34d399' : '#334155'}
-              />
-              <text x={x + barW / 2} y={svgH + 14} textAnchor="middle" fill="#64748b" fontSize="9">{p.label}</text>
-              {p.profit > 0 && (
-                <text x={x + barW / 2} y={svgH - barH - 4} textAnchor="middle" fill="#34d399" fontSize="8">
-                  {p.profit >= 10000 ? `${Math.round(p.profit / 1000)}k` : p.profit}
+              {/* 見込み（上） */}
+              {pendH > 0 && <rect x={x} y={svgH - totalH} width={barW} height={pendH} rx={pendH === totalH ? 4 : 0} fill="#fbbf24" />}
+              {/* 確定（下） */}
+              {confH > 0 && <rect x={x} y={svgH - confH} width={barW} height={confH} rx={4} fill="#34d399" />}
+              {/* 空バー */}
+              {totalH === 2 && <rect x={x} y={svgH - 2} width={barW} height={2} rx={1} fill="#334155" />}
+              <text x={x + barW / 2} y={svgH + 14} textAnchor="middle" fill="#64748b" fontSize="9">{d.label}</text>
+              {total > 0 && (
+                <text x={x + barW / 2} y={svgH - totalH - 4} textAnchor="middle" fill={d.confirmed > 0 ? '#34d399' : '#fbbf24'} fontSize="8">
+                  {total >= 10000 ? `${Math.round(total / 1000)}k` : total}
                 </text>
               )}
             </g>
@@ -744,6 +759,63 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+
+                {/* コンテナ積載シミュレーター */}
+                {(() => {
+                  // 商品カテゴリ別の容積（m³）推定
+                  const volMap: Record<string, number> = {
+                    '電動車椅子': 0.35, '手動車椅子': 0.20, '介護ベッド': 1.20, '歩行器': 0.10,
+                  }
+                  const getVol = (title: string) => {
+                    if (title.includes('電動車椅子') || title.includes('電動')) return volMap['電動車椅子']
+                    if (title.includes('車椅子') || title.includes('車いす')) return volMap['手動車椅子']
+                    if (title.includes('介護ベッド') || title.includes('ベッド')) return volMap['介護ベッド']
+                    if (title.includes('歩行器')) return volMap['歩行器']
+                    return 0.25 // デフォルト
+                  }
+                  const CONTAINER_VOL = 28 // 20フィートコンテナ有効容積(m³)
+                  const activeDeals = deals.filter(d => d.status !== '完了' && d.status !== 'done')
+                  const usedVol = activeDeals.reduce((s, d) => s + getVol(d.title), 0)
+                  const usedPct = Math.min(100, Math.round((usedVol / CONTAINER_VOL) * 100))
+                  const remainVol = Math.max(0, CONTAINER_VOL - usedVol)
+                  const segW = 200
+                  const filledW = Math.round((usedPct / 100) * segW)
+                  return (
+                    <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm font-medium text-white">🚢 コンテナ積載シミュレーター</div>
+                        <div className="text-xs text-slate-500">20フィート（{CONTAINER_VOL}m³）</div>
+                      </div>
+                      {/* プログレスバー */}
+                      <div className="relative h-6 bg-slate-800 rounded-lg overflow-hidden mb-2">
+                        <div
+                          className={`h-full rounded-lg transition-all ${usedPct >= 90 ? 'bg-red-500' : usedPct >= 70 ? 'bg-amber-500' : 'bg-sky-500'}`}
+                          style={{ width: `${usedPct}%` }}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">{usedPct}% 使用</div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-xs mt-3">
+                        <div className="text-center">
+                          <div className="text-slate-500">使用済み</div>
+                          <div className="text-sky-400 font-bold">{usedVol.toFixed(1)}m³</div>
+                          <div className="text-slate-600">{activeDeals.length}件</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-slate-500">残り容積</div>
+                          <div className={`font-bold ${remainVol < 5 ? 'text-red-400' : 'text-emerald-400'}`}>{remainVol.toFixed(1)}m³</div>
+                          <div className="text-slate-600">約{Math.floor(remainVol / 0.2)}台分※</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-slate-500">輸送タイミング</div>
+                          <div className={`font-bold ${usedPct >= 70 ? 'text-emerald-400' : usedPct >= 40 ? 'text-amber-400' : 'text-slate-400'}`}>
+                            {usedPct >= 70 ? '🟢 GO' : usedPct >= 40 ? '🟡 準備中' : '🔴 積載待ち'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-[10px] text-slate-600 mt-2">※手動車椅子0.2m³換算。電動車椅子0.35m³・介護ベッド1.2m³・歩行器0.1m³</div>
+                    </div>
+                  )
+                })()}
 
                 {dealsLoading ? (
                   <div className="text-center py-8 text-slate-500"><RefreshCw size={20} className="animate-spin mx-auto mb-2" />読み込み中...</div>
