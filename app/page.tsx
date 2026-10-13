@@ -64,10 +64,11 @@ const PATROL_SITES = [
 ]
 
 const siteColors: Record<string, string> = {
-  'ヤフオク':  'bg-red-500/20 text-red-400 border-red-500/30',
-  'ジモティー': 'bg-green-500/20 text-green-400 border-green-500/30',
-  'メルカリ':  'bg-rose-500/20 text-rose-400 border-rose-500/30',
-  'ラクマ':    'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'ヤフオク':        'bg-red-500/20 text-red-400 border-red-500/30',
+  'ジモティー':      'bg-green-500/20 text-green-400 border-green-500/30',
+  'メルカリ':        'bg-rose-500/20 text-rose-400 border-rose-500/30',
+  'ラクマ':          'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'セカンドストリート': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
 }
 
 const statusLabel: Record<string, { label: string; cls: string }> = {
@@ -87,8 +88,8 @@ const notifications = [
   { id: 3, type: 'news',  msg: 'スリランカ医療機器輸入関税の改定情報が更新されました', time: '3時間前', read: true },
 ]
 
-type Tab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'settings' | 'notifications'
-type PrevTab = 'radar' | 'inventory' | 'intel' | 'kithul'
+type Tab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'export' | 'settings' | 'notifications'
+type PrevTab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'export'
 
 // ===== コスト設定のデフォルト値 =====
 const DEFAULT_COSTS = {
@@ -283,6 +284,86 @@ export default function Home() {
   const [kithulStock, setKithulStock] = useState<KithulItem[]>([])
   const [kithulLoading, setKithulLoading] = useState(true)
   const [editingKithul, setEditingKithul] = useState<string | null>(null)
+
+  // 販売ページ生成
+  const [exportForm, setExportForm] = useState({
+    imageUrl: '',
+    titleJa: '',
+    descJa: '',
+    priceJpy: '',
+    condition: '良好',
+    route: 'personal' as 'personal' | 'bulk',
+    bulkMin: '3',
+  })
+  const [exportResult, setExportResult] = useState<{ title: string; desc: string; post: string } | null>(null)
+  const [exportLoading, setExportLoading] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // ===== 翻訳（Google翻訳 無料エンドポイント） =====
+  const translateToEn = async (text: string): Promise<string> => {
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=${encodeURIComponent(text)}`
+      const res = await fetch(url)
+      const data = await res.json()
+      return data[0].map((d: [string]) => d[0]).join('')
+    } catch {
+      return text
+    }
+  }
+
+  const generateExportPost = async () => {
+    setExportLoading(true)
+    setExportResult(null)
+    try {
+      const [titleEn, descEn] = await Promise.all([
+        translateToEn(exportForm.titleJa),
+        translateToEn(exportForm.descJa),
+      ])
+      const priceJpy = Number(exportForm.priceJpy) || 0
+      const priceLkr = Math.round(priceJpy / (rates.lkr || 0.44))
+      const conditionEn: Record<string, string> = { '新品同様': 'Like New', '良好': 'Good Condition', '使用感あり': 'Used - Fair', 'ジャンク': 'For Parts' }
+      const cond = conditionEn[exportForm.condition] || 'Good Condition'
+
+      let post = ''
+      if (exportForm.route === 'personal') {
+        post = `🇯🇵 Japanese Quality Medical Equipment for Sale! 🇯🇵
+
+📦 ${titleEn}
+✅ Condition: ${cond}
+💴 Price: LKR ${priceLkr.toLocaleString()} (¥${priceJpy.toLocaleString()})
+
+${descEn}
+
+🌟 WHY BUY JAPANESE?
+• Strict quality standards
+• Long-lasting durability
+• Hard to find in Sri Lanka
+
+📩 DM to order | Delivery within 4-6 weeks
+#JapaneseMedicalEquipment #SriLanka #MedicalEquipment #Japan`
+      } else {
+        post = `🏥 Bulk Order Available – Japanese Medical Equipment 🏥
+
+📦 ${titleEn}
+✅ Condition: ${cond}
+💴 Unit Price: LKR ${priceLkr.toLocaleString()} / ¥${priceJpy.toLocaleString()}
+📦 Minimum Order: ${exportForm.bulkMin} units
+
+${descEn}
+
+✈️ Direct import from Japan
+⏱ Lead time: 4-6 weeks after order confirmation
+📋 Bulk discount available for ${Number(exportForm.bulkMin) * 2}+ units
+
+📩 Contact for quotation
+#MedicalEquipmentSriLanka #BulkOrder #JapanImport #Healthcare`
+      }
+
+      setExportResult({ title: titleEn, desc: descEn, post })
+    } finally {
+      setExportLoading(false)
+    }
+  }
 
   // ===== データ取得 =====
   const fetchDeals = useCallback(async () => {
@@ -577,10 +658,11 @@ export default function Home() {
             {/* タブナビ */}
             <div className="flex gap-1 bg-[#1e293b] rounded-xl p-1">
               {([
-                { id: 'radar',     label: '🔍 仕入れレーダー' },
-                { id: 'inventory', label: '📦 在庫・案件' },
-                { id: 'intel',     label: '🌍 市場情報' },
+                { id: 'radar',     label: '🔍 仕入れ' },
+                { id: 'inventory', label: '📦 案件' },
+                { id: 'intel',     label: '🌍 市場' },
                 { id: 'kithul',    label: '🌿 キトゥル' },
+                { id: 'export',    label: '🌐 販売' },
               ] as { id: Tab; label: string }[]).map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
                   className={`flex-1 py-2 px-1 rounded-lg text-xs sm:text-sm font-medium transition-all ${tab === t.id ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/20' : 'text-slate-400 hover:text-slate-200'}`}>
@@ -594,15 +676,21 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-white flex items-center gap-2"><Search size={16} className="text-sky-400" />新着仕入れ候補</h2>
-                  <button onClick={async () => { setRadarScanning(true); await new Promise(r => setTimeout(r, 2000)); setRadarScanning(false) }} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
-                    <RefreshCw size={12} className={radarScanning ? 'animate-spin' : ''} /> {radarScanning ? '巡回中...' : '今すぐ巡回'}
+                  <button onClick={async () => {
+                    setRadarScanning(true)
+                    PATROL_SITES.forEach(s => window.open(s.url, '_blank'))
+                    await new Promise(r => setTimeout(r, 2000))
+                    setRadarScanning(false)
+                  }} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 border border-sky-500/30 bg-sky-500/10 px-2 py-1 rounded-lg transition-colors">
+                    <RefreshCw size={12} className={radarScanning ? 'animate-spin' : ''} /> {radarScanning ? '巡回中...' : '今すぐ巡回 ↗'}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {['ヤフオク', 'ジモティー', 'メルカリ', 'ラクマ', 'セカンドストリート'].map(site => (
-                    <div key={site} className={`badge border ${siteColors[site] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
-                      <span className="pulse-dot" />{site}
-                    </div>
+                  {PATROL_SITES.map(site => (
+                    <a key={site.name} href={site.url} target="_blank" rel="noopener noreferrer"
+                      className={`badge border cursor-pointer hover:opacity-80 transition-opacity ${siteColors[site.name] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                      <span className="pulse-dot" />{site.name}
+                    </a>
                   ))}
                 </div>
 
@@ -1020,11 +1108,108 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* 販売ページ生成タブ */}
+            {tab === 'export' && (
+              <div className="space-y-4">
+                <h2 className="font-semibold text-white flex items-center gap-2"><Globe size={16} className="text-sky-400" />スリランカ向け販売ページ生成</h2>
+
+                {/* ルート選択 */}
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { key: 'personal', label: '👤 個人販売ルート', desc: 'Facebook/個人向け' },
+                    { key: 'bulk',     label: '🏥 バラ姉まとめ発注', desc: 'ロット・法人向け' },
+                  ] as const).map(r => (
+                    <button key={r.key} onClick={() => setExportForm(f => ({ ...f, route: r.key }))}
+                      className={`p-3 rounded-xl border text-left transition-all ${exportForm.route === r.key ? 'border-sky-500 bg-sky-500/10' : 'border-slate-700 bg-[#1e293b]'}`}>
+                      <div className="text-sm font-medium text-white">{r.label}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{r.desc}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* 商品情報入力 */}
+                <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="text-xs text-sky-400 font-medium">📝 商品情報（日本語で入力）</div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">画像URL（ヤフオク等の画像リンク）</label>
+                    <input type="url" value={exportForm.imageUrl} onChange={e => setExportForm(f => ({ ...f, imageUrl: e.target.value }))}
+                      placeholder="https://..." className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                    {exportForm.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={exportForm.imageUrl} alt="preview" className="mt-2 w-full max-h-40 object-contain rounded-lg bg-slate-900" onError={e => (e.currentTarget.style.display = 'none')} />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">商品名（日本語）</label>
+                    <input type="text" value={exportForm.titleJa} onChange={e => setExportForm(f => ({ ...f, titleJa: e.target.value }))}
+                      placeholder="例: 電動車椅子 YAMAHA JWX-2 動作良好" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">説明（日本語）</label>
+                    <textarea value={exportForm.descJa} onChange={e => setExportForm(f => ({ ...f, descJa: e.target.value }))} rows={3}
+                      placeholder="例: 使用回数少なく状態は良好です。折りたたみ可能で収納・輸送に便利です。" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">販売価格（円）</label>
+                      <input type="number" value={exportForm.priceJpy} onChange={e => setExportForm(f => ({ ...f, priceJpy: e.target.value }))}
+                        placeholder="85000" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                      {exportForm.priceJpy && <div className="text-xs text-amber-400 mt-1">≈ LKR {Math.round(Number(exportForm.priceJpy) / (rates.lkr || 0.44)).toLocaleString()}</div>}
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">状態</label>
+                      <select value={exportForm.condition} onChange={e => setExportForm(f => ({ ...f, condition: e.target.value }))}
+                        className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                        {['新品同様', '良好', '使用感あり', 'ジャンク'].map(c => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {exportForm.route === 'bulk' && (
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">最低発注数（台）</label>
+                      <input type="number" value={exportForm.bulkMin} onChange={e => setExportForm(f => ({ ...f, bulkMin: e.target.value }))}
+                        className="w-32 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500" />
+                    </div>
+                  )}
+
+                  <button onClick={generateExportPost} disabled={!exportForm.titleJa || exportLoading}
+                    className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    {exportLoading ? <><RefreshCw size={16} className="animate-spin" /> 翻訳中...</> : <><Globe size={16} /> 英語投稿文を生成</>}
+                  </button>
+                </div>
+
+                {/* 生成結果 */}
+                {exportResult && (
+                  <div className="bg-[#1e293b] border border-emerald-500/30 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-emerald-400 font-medium">✅ 生成完了 · Facebook投稿用</div>
+                      <button onClick={() => {
+                        navigator.clipboard.writeText(exportResult.post)
+                        setCopied(true)
+                        setTimeout(() => setCopied(false), 2000)
+                      }} className={`text-xs px-3 py-1 rounded-lg transition-colors ${copied ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}>
+                        {copied ? '✓ コピー済み' : 'コピー'}
+                      </button>
+                    </div>
+                    <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans bg-[#0f172a] rounded-lg p-3 leading-relaxed">{exportResult.post}</pre>
+                    <div className="text-xs text-slate-500">
+                      ※ 為替レート: ¥1 ≈ LKR {(1 / (rates.lkr || 0.44)).toFixed(1)} · 翻訳はGoogle翻訳を使用
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
 
         <div className="text-center text-xs text-slate-700 pb-4">
-          NIWA Dashboard v0.4 · 最終更新: {new Date().toLocaleString('ja-JP')}
+          NIWA Dashboard v0.8 · 最終更新: {new Date().toLocaleString('ja-JP')}
         </div>
       </main>
 
