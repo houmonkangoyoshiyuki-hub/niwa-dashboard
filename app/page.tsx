@@ -43,12 +43,13 @@ interface NewsItem {
 }
 
 // ===== 定数 =====
+// regulation: 'clear'=問題なし(ClassA), 'check'=要確認, 'warn'=規制リスク高
 const mockFinds = [
-  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=電動車椅子', estimatedSell: 85000, margin: 57000 },
-  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale-fur/article-medicalequip', estimatedSell: 45000, margin: 30000 },
-  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=車椅子', estimatedSell: 22000, margin: 13500 },
-  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search[keyword]=歩行器', estimatedSell: 9000, margin: 5800 },
-  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=介護ベッド', estimatedSell: 98000, margin: 63000 },
+  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=電動車椅子', estimatedSell: 85000, margin: 57000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
+  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale-fur/article-medicalequip', estimatedSell: 45000, margin: 30000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
+  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=車椅子', estimatedSell: 22000, margin: 13500, regulation: 'clear' as const, regNote: '手動ClassA・比較的クリア' },
+  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search[keyword]=歩行器', estimatedSell: 9000, margin: 5800, regulation: 'clear' as const, regNote: '雑品扱いの可能性あり' },
+  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=介護ベッド', estimatedSell: 98000, margin: 63000, regulation: 'warn' as const, regNote: '電動大型→NMRA登録必須の可能性' },
 ]
 
 const siteColors: Record<string, string> = {
@@ -78,28 +79,38 @@ const notifications = [
 type Tab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'settings' | 'notifications'
 type PrevTab = 'radar' | 'inventory' | 'intel' | 'kithul'
 
-// ===== コスト設定のデフォルト値（叔父さんの資料ベース） =====
+// ===== コスト設定のデフォルト値 =====
 const DEFAULT_COSTS = {
   domesticShipping: 3000,   // 国内輸送費（円/件）
   seaFreight: 8000,         // 船代・コンテナ按分（円/件）
-  customsDutyPct: 15,       // スリランカ関税（売値の%）
+  customsDutyPct: 10,       // スリランカ関税（売値の%）
+  vatPct: 18,               // スリランカVAT（売値の%）
+  palPct: 10,               // 港湾・空港開発税（売値の%）
+  sscl: 2.5,                // 社会保障賦課金（売値の%）
   platformFeePct: 10,       // ヤフオク等手数料（仕入値の%）
   targetMarginPct: 30,      // 目標利益率（%）
+  scenario: 'standard' as 'optimistic' | 'standard' | 'pessimistic',
+}
+
+// シナリオ別の課税率プリセット（関税+VAT+PAL+SSCLの合計）
+const SCENARIOS = {
+  optimistic:  { label: '楽観', desc: '関税免除・VAT軽減あり', totalTaxPct: 20, color: 'text-emerald-400' },
+  standard:    { label: '標準', desc: '関税10%+VAT18%+PAL10%+SSCL2.5%', totalTaxPct: 40, color: 'text-amber-400' },
+  pessimistic: { label: '悲観', desc: 'フル課税+追加Cess', totalTaxPct: 50, color: 'text-red-400' },
 }
 
 // ===== コスト計算 =====
 function calcExport(buyPrice: number, costs: typeof DEFAULT_COSTS) {
   const platformFee = Math.round(buyPrice * costs.platformFeePct / 100)
   const fixedCosts = costs.domesticShipping + costs.seaFreight + platformFee
-  // 目標利益率を達成する売値を逆算
-  // 手取り = 売値 - 売値×関税率 - fixedCosts - buyPrice >= 売値×目標利益率
-  // 売値 × (1 - 関税率/100 - 目標利益率/100) = fixedCosts + buyPrice
-  const divisor = 1 - (costs.customsDutyPct / 100) - (costs.targetMarginPct / 100)
-  const recommendedSell = divisor > 0 ? Math.ceil((fixedCosts + buyPrice) / divisor / 1000) * 1000 : buyPrice * 4
-  const customsDuty = Math.round(recommendedSell * costs.customsDutyPct / 100)
-  const netProfit = recommendedSell - customsDuty - fixedCosts - buyPrice
+  const taxRate = SCENARIOS[costs.scenario].totalTaxPct / 100
+  // 売値 × (1 - 総税率 - 目標利益率) = fixedCosts + buyPrice
+  const divisor = 1 - taxRate - (costs.targetMarginPct / 100)
+  const recommendedSell = divisor > 0 ? Math.ceil((fixedCosts + buyPrice) / divisor / 1000) * 1000 : buyPrice * 5
+  const totalTax = Math.round(recommendedSell * taxRate)
+  const netProfit = recommendedSell - totalTax - fixedCosts - buyPrice
   const actualMargin = recommendedSell > 0 ? Math.round((netProfit / recommendedSell) * 100) : 0
-  return { recommendedSell, netProfit, actualMargin, fixedCosts, customsDuty, platformFee }
+  return { recommendedSell, netProfit, actualMargin, fixedCosts, totalTax, platformFee, taxRate }
 }
 
 // ===== 利益グラフ（SVG） =====
@@ -422,13 +433,62 @@ export default function Home() {
         {tab === 'settings' && (
           <div className="space-y-4">
             <h2 className="font-semibold text-white flex items-center gap-2"><Settings size={16} className="text-slate-400" /> 設定</h2>
+
+            {/* 利益計算シナリオ */}
+            <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="text-sm font-medium text-white">📊 利益計算シナリオ</div>
+              <div className="text-xs text-slate-500 mb-2">スリランカ側の課税状況に応じて切り替え。全計算に即反映されます。</div>
+              <div className="grid grid-cols-3 gap-2">
+                {(Object.keys(SCENARIOS) as Array<keyof typeof SCENARIOS>).map(key => (
+                  <button
+                    key={key}
+                    onClick={() => setCosts(prev => ({ ...prev, scenario: key }))}
+                    className={`rounded-xl p-3 border text-left transition-all ${costs.scenario === key
+                      ? key === 'optimistic' ? 'border-emerald-500 bg-emerald-500/10'
+                        : key === 'standard' ? 'border-amber-500 bg-amber-500/10'
+                        : 'border-red-500 bg-red-500/10'
+                      : 'border-slate-700 bg-slate-800/50 opacity-60'}`}
+                  >
+                    <div className={`text-sm font-bold ${SCENARIOS[key].color}`}>{SCENARIOS[key].label}</div>
+                    <div className={`text-lg font-black mt-0.5 ${SCENARIOS[key].color}`}>{SCENARIOS[key].totalTaxPct}%</div>
+                    <div className="text-[10px] text-slate-500 mt-1 leading-tight">{SCENARIOS[key].desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* コスト変数 */}
+            <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 space-y-3">
+              <div className="text-sm font-medium text-white">⚙️ 固定コスト設定</div>
+              {[
+                { key: 'domesticShipping' as const, label: '国内輸送費（円）', unit: '¥' },
+                { key: 'seaFreight' as const, label: '船代・コンテナ按分（円）', unit: '¥' },
+                { key: 'platformFeePct' as const, label: 'ヤフオク等手数料', unit: '%' },
+                { key: 'targetMarginPct' as const, label: '目標利益率', unit: '%' },
+              ].map(({ key, label, unit }) => (
+                <div key={key} className="flex items-center gap-3">
+                  <div className="flex-1 text-xs text-slate-400">{label}</div>
+                  <div className="flex items-center gap-1 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-1.5">
+                    <span className="text-xs text-slate-500">{unit}</span>
+                    <input
+                      type="number"
+                      value={costs[key]}
+                      onChange={e => setCosts(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                      className="w-20 bg-transparent text-sm text-white text-right focus:outline-none"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* その他設定 */}
             <div className="bg-[#1e293b] border border-slate-800 rounded-xl divide-y divide-slate-800">
               {[
                 { label: 'アカウント', desc: '丹羽芳幸 / houmon.kango.yoshiyuki@gmail.com', icon: '👤' },
                 { label: '為替レート更新', desc: 'LKR/JPY レートを毎時自動取得（exchangerate-api）', icon: '💱', toggle: true },
                 { label: 'AI提案通知', desc: 'Claude Haiku による毎日自動生成', icon: '🤖', toggle: true },
                 { label: 'レーダー巡回間隔', desc: '30分ごとに自動スキャン（GitHub Actions）', icon: '🔍' },
-                { label: 'バージョン', desc: 'NIWA Dashboard v0.4 · フル機能版', icon: 'ℹ️' },
+                { label: 'バージョン', desc: 'NIWA Dashboard v0.5 · シナリオ計算・規制フラグ対応', icon: 'ℹ️' },
               ].map((s, i) => (
                 <div key={i} className="flex items-center gap-4 p-4">
                   <span className="text-xl">{s.icon}</span>
@@ -525,10 +585,12 @@ export default function Home() {
                   const calc = calcExport(item.price, costs)
                   const sellVal = est?.sell ? Number(est.sell) : calc.recommendedSell
                   // 表示用：入力売値でのコスト再計算
-                  const customsDuty = Math.round(sellVal * costs.customsDutyPct / 100)
-                  const netProfit = sellVal - customsDuty - calc.fixedCosts - item.price
+                  const totalTaxManual = Math.round(sellVal * calc.taxRate)
+                  const netProfit = sellVal - totalTaxManual - calc.fixedCosts - item.price
                   const marginPct = sellVal > 0 ? Math.round((netProfit / sellVal) * 100) : 0
                   const marginColor = marginPct >= costs.targetMarginPct ? 'text-emerald-400' : marginPct >= 20 ? 'text-amber-400' : 'text-red-400'
+                  const regColors = { clear: 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10', check: 'text-amber-400 border-amber-500/40 bg-amber-500/10', warn: 'text-red-400 border-red-500/40 bg-red-500/10' }
+                  const regIcons = { clear: '🟢', check: '🟡', warn: '🔴' }
                   const isOpen = expandedFind === item.id
 
                   return (
@@ -537,9 +599,10 @@ export default function Home() {
                       <div className="flex items-center gap-4 p-4">
                         <div className="text-3xl flex-shrink-0">{item.image}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className={`badge border text-[10px] ${siteColors[item.site] || ''}`}>{item.site}</span>
                             {item.status === 'new' && <span className="badge badge-new">NEW</span>}
+                            <span className={`badge border text-[10px] ${regColors[item.regulation]}`} title={item.regNote}>{regIcons[item.regulation]} 規制{item.regulation === 'clear' ? 'OK' : item.regulation === 'check' ? '要確認' : '要注意'}</span>
                             <span className="text-xs text-slate-500">{item.time}</span>
                           </div>
                           <p className="text-sm text-slate-200 font-medium truncate">{item.title}</p>
@@ -574,7 +637,10 @@ export default function Home() {
                             <div className="flex justify-between text-slate-500"><span>手数料（{costs.platformFeePct}%）</span><span>-¥{calc.platformFee.toLocaleString()}</span></div>
                             <div className="flex justify-between text-slate-500"><span>国内輸送</span><span>-¥{costs.domesticShipping.toLocaleString()}</span></div>
                             <div className="flex justify-between text-slate-500"><span>船代・コンテナ按分</span><span>-¥{costs.seaFreight.toLocaleString()}</span></div>
-                            <div className="flex justify-between text-slate-500"><span>現地関税（{costs.customsDutyPct}%）</span><span>-¥{customsDuty.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500">
+                              <span>現地諸税（{SCENARIOS[costs.scenario].totalTaxPct}%）<span className={`ml-1 ${SCENARIOS[costs.scenario].color}`}>[{SCENARIOS[costs.scenario].label}]</span></span>
+                              <span>-¥{totalTaxManual.toLocaleString()}</span>
+                            </div>
                             <div className="border-t border-slate-700 pt-1.5 flex justify-between font-bold"><span className="text-slate-300">手取り利益</span><span className={marginColor}>¥{netProfit.toLocaleString()}（{marginPct}%）</span></div>
                           </div>
                           {/* 売値編集 */}
