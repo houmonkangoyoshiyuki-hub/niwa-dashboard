@@ -78,6 +78,30 @@ const notifications = [
 type Tab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'settings' | 'notifications'
 type PrevTab = 'radar' | 'inventory' | 'intel' | 'kithul'
 
+// ===== コスト設定のデフォルト値（叔父さんの資料ベース） =====
+const DEFAULT_COSTS = {
+  domesticShipping: 3000,   // 国内輸送費（円/件）
+  seaFreight: 8000,         // 船代・コンテナ按分（円/件）
+  customsDutyPct: 15,       // スリランカ関税（売値の%）
+  platformFeePct: 10,       // ヤフオク等手数料（仕入値の%）
+  targetMarginPct: 30,      // 目標利益率（%）
+}
+
+// ===== コスト計算 =====
+function calcExport(buyPrice: number, costs: typeof DEFAULT_COSTS) {
+  const platformFee = Math.round(buyPrice * costs.platformFeePct / 100)
+  const fixedCosts = costs.domesticShipping + costs.seaFreight + platformFee
+  // 目標利益率を達成する売値を逆算
+  // 手取り = 売値 - 売値×関税率 - fixedCosts - buyPrice >= 売値×目標利益率
+  // 売値 × (1 - 関税率/100 - 目標利益率/100) = fixedCosts + buyPrice
+  const divisor = 1 - (costs.customsDutyPct / 100) - (costs.targetMarginPct / 100)
+  const recommendedSell = divisor > 0 ? Math.ceil((fixedCosts + buyPrice) / divisor / 1000) * 1000 : buyPrice * 4
+  const customsDuty = Math.round(recommendedSell * costs.customsDutyPct / 100)
+  const netProfit = recommendedSell - customsDuty - fixedCosts - buyPrice
+  const actualMargin = recommendedSell > 0 ? Math.round((netProfit / recommendedSell) * 100) : 0
+  return { recommendedSell, netProfit, actualMargin, fixedCosts, customsDuty, platformFee }
+}
+
 // ===== 利益グラフ（SVG） =====
 function ProfitDonut({ deals }: { deals: Deal[] }) {
   const statusGroups = [
@@ -189,6 +213,7 @@ export default function Home() {
   const [notifCount, setNotifCount] = useState(2)
   const [expandedFind, setExpandedFind] = useState<number | null>(null)
   const [findEstimates, setFindEstimates] = useState<Record<number, { sell: string; memo: string }>>({})
+  const [costs, setCosts] = useState(DEFAULT_COSTS)
 
   // 案件
   const [deals, setDeals] = useState<Deal[]>([])
@@ -497,9 +522,13 @@ export default function Home() {
 
                 {mockFinds.map(item => {
                   const est = findEstimates[item.id]
-                  const sellVal = est?.sell ? Number(est.sell) : item.estimatedSell
-                  const profitVal = sellVal - item.price
-                  const marginPct = sellVal > 0 ? Math.round((profitVal / sellVal) * 100) : 0
+                  const calc = calcExport(item.price, costs)
+                  const sellVal = est?.sell ? Number(est.sell) : calc.recommendedSell
+                  // 表示用：入力売値でのコスト再計算
+                  const customsDuty = Math.round(sellVal * costs.customsDutyPct / 100)
+                  const netProfit = sellVal - customsDuty - calc.fixedCosts - item.price
+                  const marginPct = sellVal > 0 ? Math.round((netProfit / sellVal) * 100) : 0
+                  const marginColor = marginPct >= costs.targetMarginPct ? 'text-emerald-400' : marginPct >= 20 ? 'text-amber-400' : 'text-red-400'
                   const isOpen = expandedFind === item.id
 
                   return (
@@ -515,9 +544,11 @@ export default function Home() {
                           </div>
                           <p className="text-sm text-slate-200 font-medium truncate">{item.title}</p>
                           <div className="flex items-center gap-3 mt-1">
-                            <p className="text-base font-bold text-white">¥{item.price.toLocaleString()}</p>
+                            <p className="text-sm text-slate-400">仕入¥{item.price.toLocaleString()}</p>
                             <span className="text-xs text-slate-600">→</span>
-                            <p className="text-base font-bold text-emerald-400">+¥{profitVal.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-1">({marginPct}%)</span></p>
+                            <p className="text-sm text-sky-400">推奨売¥{calc.recommendedSell.toLocaleString()}</p>
+                            <span className="text-xs text-slate-600">→</span>
+                            <p className={`text-sm font-bold ${marginColor}`}>手取+¥{calc.netProfit.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-1">({calc.actualMargin}%)</span></p>
                           </div>
                         </div>
                         <div className="flex flex-col gap-2 flex-shrink-0">
@@ -536,27 +567,30 @@ export default function Home() {
                       {/* 展開パネル */}
                       {isOpen && (
                         <div className="border-t border-slate-700 bg-[#162032] p-4 space-y-3">
-                          <div className="text-xs text-sky-400 font-medium mb-2">📋 案件詳細を確認して登録</div>
-                          <div className="grid grid-cols-3 gap-3 text-center">
-                            <div className="bg-[#0f172a] rounded-lg p-2">
-                              <div className="text-xs text-slate-500 mb-1">仕入値</div>
-                              <div className="text-white font-bold">¥{item.price.toLocaleString()}</div>
-                            </div>
-                            <div className="bg-[#0f172a] rounded-lg p-2">
-                              <div className="text-xs text-slate-500 mb-1">売値（見込）</div>
+                          <div className="text-xs text-sky-400 font-medium">📋 コスト内訳 · 売値を変えると自動計算</div>
+                          {/* コスト内訳 */}
+                          <div className="bg-[#0f172a] rounded-lg p-3 space-y-1.5 text-xs">
+                            <div className="flex justify-between text-slate-500"><span>仕入値</span><span className="text-white">¥{item.price.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500"><span>手数料（{costs.platformFeePct}%）</span><span>-¥{calc.platformFee.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500"><span>国内輸送</span><span>-¥{costs.domesticShipping.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500"><span>船代・コンテナ按分</span><span>-¥{costs.seaFreight.toLocaleString()}</span></div>
+                            <div className="flex justify-between text-slate-500"><span>現地関税（{costs.customsDutyPct}%）</span><span>-¥{customsDuty.toLocaleString()}</span></div>
+                            <div className="border-t border-slate-700 pt-1.5 flex justify-between font-bold"><span className="text-slate-300">手取り利益</span><span className={marginColor}>¥{netProfit.toLocaleString()}（{marginPct}%）</span></div>
+                          </div>
+                          {/* 売値編集 */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="text-xs text-slate-500 mb-1">売値（変更可）</div>
                               <input
                                 type="number"
-                                value={est?.sell ?? item.estimatedSell}
+                                value={est?.sell ?? calc.recommendedSell}
                                 onChange={e => setFindEstimates(prev => ({ ...prev, [item.id]: { ...prev[item.id], sell: e.target.value } }))}
-                                className="w-full bg-transparent text-emerald-400 font-bold text-center focus:outline-none border-b border-slate-600 focus:border-sky-400"
+                                className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-emerald-400 font-bold focus:outline-none focus:border-sky-500"
                               />
                             </div>
-                            <div className="bg-[#0f172a] rounded-lg p-2">
-                              <div className="text-xs text-slate-500 mb-1">予想利益</div>
-                              <div className={`font-bold ${profitVal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                ¥{profitVal.toLocaleString()}
-                              </div>
-                              <div className="text-xs text-slate-500">{marginPct}%</div>
+                            <div className="text-center">
+                              <div className="text-xs text-slate-500 mb-1">目標利益率</div>
+                              <div className="text-sm font-bold text-sky-400">{costs.targetMarginPct}%</div>
                             </div>
                           </div>
                           <input
@@ -571,7 +605,7 @@ export default function Home() {
                             <button
                               onClick={async () => {
                                 setSaving(true)
-                                const sell = est?.sell ? Number(est.sell) : item.estimatedSell
+                                const sell = est?.sell ? Number(est.sell) : calc.recommendedSell
                                 await supabase.from('deals').insert([{
                                   title: item.title, source: item.site,
                                   buy_price: item.price, sell_price: sell,
