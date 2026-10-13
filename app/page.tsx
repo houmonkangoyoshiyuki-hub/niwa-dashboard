@@ -981,33 +981,48 @@ ${descEn}
                   return (
                     <div key={item.id} className="bg-[#1e293b] border border-slate-800 rounded-xl overflow-hidden card-hover">
                       {/* メイン行 */}
-                      <div className="flex items-center gap-4 p-4">
-                        <div className="text-3xl flex-shrink-0">{item.image}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className={`badge border text-[10px] ${siteColors[item.site] || ''}`}>{item.site}</span>
-                            {item.status === 'new' && <span className="badge badge-new">NEW</span>}
-                            <span className={`badge border text-[10px] ${regColors[item.regulation]}`} title={item.regNote}>{regIcons[item.regulation]} 規制{item.regulation === 'clear' ? 'OK' : item.regulation === 'check' ? '要確認' : '要注意'}</span>
-                            <span className="text-xs text-slate-500">{item.time}</span>
-                          </div>
-                          <p className="text-sm text-slate-200 font-medium truncate">{item.title}</p>
-                          <div className="flex items-center gap-3 mt-1">
-                            <p className="text-sm text-slate-400">仕入¥{item.price.toLocaleString()}</p>
-                            <span className="text-xs text-slate-600">→</span>
-                            <p className="text-sm text-sky-400">推奨売¥{calc.recommendedSell.toLocaleString()}</p>
-                            <span className="text-xs text-slate-600">→</span>
-                            <p className={`text-sm font-bold ${marginColor}`}>手取+¥{calc.netProfit.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-1">({calc.actualMargin}%)</span></p>
+                      <div className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="text-3xl flex-shrink-0">{item.image}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={`badge border text-[10px] ${siteColors[item.site] || ''}`}>{item.site}</span>
+                              {item.status === 'new' && <span className="badge badge-new">NEW</span>}
+                              <span className={`badge border text-[10px] ${regColors[item.regulation]}`} title={item.regNote}>{regIcons[item.regulation]} 規制{item.regulation === 'clear' ? 'OK' : item.regulation === 'check' ? '要確認' : '要注意'}</span>
+                              <span className="text-xs text-slate-500">{item.time}</span>
+                            </div>
+                            <p className="text-sm text-slate-200 font-medium leading-snug">{item.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1.5 text-xs">
+                              <span className="text-slate-400">仕入 <span className="text-white font-medium">¥{item.price.toLocaleString()}</span></span>
+                              <span className="text-slate-600">→</span>
+                              <span className="text-slate-400">推奨売 <span className="text-sky-400 font-medium">¥{calc.recommendedSell.toLocaleString()}</span></span>
+                              <span className="text-slate-600">→</span>
+                              <span className={`font-bold ${marginColor}`}>+¥{calc.netProfit.toLocaleString()} <span className="font-normal text-slate-500">({calc.actualMargin}%)</span></span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2 flex-shrink-0">
-                          <button onClick={() => window.open(item.url, '_blank')} className="bg-sky-500 hover:bg-sky-400 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                        {/* アクションボタン行 */}
+                        <div className="flex gap-2 mt-3">
+                          <button onClick={() => window.open(item.url, '_blank')}
+                            className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs py-2 rounded-lg transition-colors flex items-center justify-center gap-1">
                             <ExternalLink size={12} /> 見る
                           </button>
-                          <button
-                            onClick={() => setExpandedFind(isOpen ? null : item.id)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
-                          >
-                            登録 {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          <button onClick={() => setExpandedFind(isOpen ? null : item.id)}
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg transition-colors flex items-center justify-center gap-1">
+                            <Plus size={12} /> 案件登録 {isOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                          </button>
+                          <button onClick={() => {
+                            setEditingListing(null)
+                            setListingForm({
+                              deal_id: '', title: item.title, description: '', condition: 'good',
+                              photo_url: '', price_jpy: String(calc.recommendedSell), cost_jpy: String(item.price),
+                              price_lkr: String(Math.round(calc.recommendedSell / (rates.lkr || 0.44))),
+                              status: 'listed', sold_price_lkr: '', buyer_name: '', route: 'personal', memo: '',
+                            })
+                            setShowListingModal(true)
+                            setTab('export')
+                          }} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs py-2 rounded-lg transition-colors flex items-center justify-center gap-1">
+                            <ShoppingBag size={12} /> 出品
                           </button>
                         </div>
                       </div>
