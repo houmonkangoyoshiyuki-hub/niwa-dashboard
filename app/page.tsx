@@ -1800,7 +1800,7 @@ ${descEn}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400 mb-1 block">コンディション</label>
-                  <select value={listingForm.condition} onChange={e => setListingForm(f => ({ ...f, condition: e.target.value }))}
+                  <select value={listingForm.condition} onChange={e => setListingForm(f => ({ ...f, condition: e.target.value as 'like_new' | 'good' | 'fair' | 'parts' }))}
                     className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
                     <option value="like_new">✨ 美品</option>
                     <option value="good">👍 良品</option>
@@ -1810,7 +1810,7 @@ ${descEn}
                 </div>
                 <div>
                   <label className="text-xs text-slate-400 mb-1 block">販売ルート</label>
-                  <select value={listingForm.route} onChange={e => setListingForm(f => ({ ...f, route: e.target.value }))}
+                  <select value={listingForm.route} onChange={e => setListingForm(f => ({ ...f, route: e.target.value as 'personal' | 'bulk' }))}
                     className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
                     <option value="personal">👤 個人出品</option>
                     <option value="bulk">🏥 一括出品</option>
