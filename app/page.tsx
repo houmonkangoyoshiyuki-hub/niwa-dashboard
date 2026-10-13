@@ -45,11 +45,22 @@ interface NewsItem {
 // ===== 定数 =====
 // regulation: 'clear'=問題なし(ClassA), 'check'=要確認, 'warn'=規制リスク高
 const mockFinds = [
-  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=電動車椅子', estimatedSell: 85000, margin: 57000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
-  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale-fur/article-medicalequip', estimatedSell: 45000, margin: 30000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
-  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=車椅子', estimatedSell: 22000, margin: 13500, regulation: 'clear' as const, regNote: '手動ClassA・比較的クリア' },
-  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search[keyword]=歩行器', estimatedSell: 9000, margin: 5800, regulation: 'clear' as const, regNote: '雑品扱いの可能性あり' },
-  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=介護ベッド', estimatedSell: 98000, margin: 63000, regulation: 'warn' as const, regNote: '電動大型→NMRA登録必須の可能性' },
+  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=%E9%9B%BB%E5%8B%95%E8%BB%8A%E6%A4%85%E5%AD%90+%E5%8F%A4%E7%89%A9', estimatedSell: 85000, margin: 57000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
+  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale/article-medicalequip?keyword=%E4%BB%8B%E8%AD%B7%E3%83%99%E3%83%83%E3%83%89', estimatedSell: 45000, margin: 30000, regulation: 'check' as const, regNote: '電動→NMRA確認推奨' },
+  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=%E8%BB%8A%E6%A4%85%E5%AD%90+%E6%8A%98%E3%82%8A%E3%81%9F%E3%81%9F%E3%81%BF&category_id=5', estimatedSell: 22000, margin: 13500, regulation: 'clear' as const, regNote: '手動ClassA・比較的クリア' },
+  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search%5Bkeyword%5D=%E6%AD%A9%E8%A1%8C%E5%99%A8&search%5Border%5D=created_at_desc', estimatedSell: 9000, margin: 5800, regulation: 'clear' as const, regNote: '雑品扱いの可能性あり' },
+  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=%E4%BB%8B%E8%AD%B7%E3%83%99%E3%83%83%E3%83%89+%E9%9B%BB%E5%8B%95', estimatedSell: 98000, margin: 63000, regulation: 'warn' as const, regNote: '電動大型→NMRA登録必須の可能性' },
+  { id: 6, site: 'ジモティー', title: '手動車椅子 カワムラサイクル KR-3 自走式', price: 5500, image: '🦽', status: 'new', time: '45分前', url: 'https://jmty.jp/all/sale/article-medicalequip?keyword=%E8%BB%8A%E6%A4%85%E5%AD%90', estimatedSell: 18000, margin: 12500, regulation: 'clear' as const, regNote: '手動ClassA・比較的クリア' },
+  { id: 7, site: 'セカンドストリート', title: 'シャワーチェア 折りたたみ ほぼ未使用', price: 1800, image: '🪑', status: 'new', time: '2時間前', url: 'https://www.2ndstreet.jp/search/result/?search_word=%E4%BB%8B%E8%AD%B7%E7%94%A8%E5%93%81', estimatedSell: 6000, margin: 4200, regulation: 'clear' as const, regNote: '雑品扱い・規制対象外の可能性高' },
+]
+
+// 巡回サイト定義（「今すぐ巡回」で開くURL）
+const PATROL_SITES = [
+  { name: 'ヤフオク', url: 'https://auctions.yahoo.co.jp/search/search?p=%E9%9B%BB%E5%8B%95%E8%BB%8A%E6%A4%85%E5%AD%90+OR+%E4%BB%8B%E8%AD%B7%E3%83%99%E3%83%83%E3%83%89+OR+%E6%AD%A9%E8%A1%8C%E5%99%A8&order=1' },
+  { name: 'ジモティー', url: 'https://jmty.jp/all/sale/article-medicalequip' },
+  { name: 'メルカリ', url: 'https://jp.mercari.com/search?keyword=%E8%BB%8A%E6%A4%85%E5%AD%90+OR+%E4%BB%8B%E8%AD%B7%E3%83%99%E3%83%83%E3%83%89&order=created_time&sort=desc' },
+  { name: 'ラクマ', url: 'https://fril.jp/search?search%5Bkeyword%5D=%E4%BB%8B%E8%AD%B7%E7%94%A8%E5%93%81&search%5Border%5D=created_at_desc' },
+  { name: 'セカンドストリート', url: 'https://www.2ndstreet.jp/search/result/?search_word=%E4%BB%8B%E8%AD%B7' },
 ]
 
 const siteColors: Record<string, string> = {
