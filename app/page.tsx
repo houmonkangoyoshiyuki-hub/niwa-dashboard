@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   Search, Package, TrendingUp, Leaf, Bell, Settings,
   ChevronRight, ExternalLink, BarChart3, Globe, RefreshCw, Star, X, Plus,
-  Edit2, Trash2, Save, Zap
+  Edit2, Trash2, Save, Zap, ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -44,11 +44,11 @@ interface NewsItem {
 
 // ===== 定数 =====
 const mockFinds = [
-  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=電動車椅子' },
-  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale-fur/article-medicalequip' },
-  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=車椅子' },
-  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search[keyword]=歩行器' },
-  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=介護ベッド' },
+  { id: 1, site: 'ヤフオク', title: '電動車椅子 YAMAHA JWX-2 動作確認済み', price: 28000, image: '🦽', status: 'new', time: '3分前', url: 'https://auctions.yahoo.co.jp/search/search?p=電動車椅子', estimatedSell: 85000, margin: 57000 },
+  { id: 2, site: 'ジモティー', title: '介護ベッド パラマウント 電動3モーター 引取歓迎', price: 15000, image: '🛏️', status: 'new', time: '12分前', url: 'https://jmty.jp/all/sale-fur/article-medicalequip', estimatedSell: 45000, margin: 30000 },
+  { id: 3, site: 'メルカリ', title: '手動車椅子 ミキ BAL-0 折りたたみ 美品', price: 8500, image: '🦽', status: 'new', time: '31分前', url: 'https://jp.mercari.com/search?keyword=車椅子', estimatedSell: 22000, margin: 13500 },
+  { id: 4, site: 'ラクマ', title: '歩行器 アルミ製 軽量タイプ 未使用に近い', price: 3200, image: '🚶', status: 'check', time: '1時間前', url: 'https://fril.jp/search?search[keyword]=歩行器', estimatedSell: 9000, margin: 5800 },
+  { id: 5, site: 'ヤフオク', title: '介護ベッド セット 電動2モーター マットレス付き', price: 35000, image: '🛏️', status: 'new', time: '2時間前', url: 'https://auctions.yahoo.co.jp/search/search?p=介護ベッド', estimatedSell: 98000, margin: 63000 },
 ]
 
 const siteColors: Record<string, string> = {
@@ -76,12 +76,119 @@ const notifications = [
 ]
 
 type Tab = 'radar' | 'inventory' | 'intel' | 'kithul' | 'settings' | 'notifications'
+type PrevTab = 'radar' | 'inventory' | 'intel' | 'kithul'
+
+// ===== 利益グラフ（SVG） =====
+function ProfitDonut({ deals }: { deals: Deal[] }) {
+  const statusGroups = [
+    { label: '仕入中',   statuses: ['仕入中','buying'],   color: '#38bdf8', bg: '#0ea5e9' },
+    { label: '輸出準備', statuses: ['輸出準備','ready'],  color: '#a78bfa', bg: '#8b5cf6' },
+    { label: '輸送中',   statuses: ['輸送中','shipping'], color: '#fb923c', bg: '#f97316' },
+    { label: '完了',     statuses: ['完了','done'],       color: '#34d399', bg: '#10b981' },
+  ]
+  const counts = statusGroups.map(g => ({
+    ...g,
+    count: deals.filter(d => g.statuses.includes(d.status)).length,
+  }))
+  const total = counts.reduce((s, g) => s + g.count, 0)
+  if (total === 0) return (
+    <div className="flex flex-col items-center justify-center h-32 text-slate-600 text-xs">案件がありません</div>
+  )
+  const r = 36, cx = 48, cy = 48, stroke = 14
+  let offset = 0
+  const circumference = 2 * Math.PI * r
+  const slices = counts.map(g => {
+    const pct = g.count / total
+    const dash = pct * circumference
+    const slice = { ...g, dash, gap: circumference - dash, offset: offset * circumference }
+    offset += pct
+    return slice
+  }).filter(s => s.count > 0)
+
+  return (
+    <div className="flex items-center gap-4">
+      <svg width="96" height="96" viewBox="0 0 96 96">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke} />
+        {slices.map((s, i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+            stroke={s.color} strokeWidth={stroke}
+            strokeDasharray={`${s.dash} ${s.gap}`}
+            strokeDashoffset={-s.offset}
+            style={{ transform: 'rotate(-90deg)', transformOrigin: '48px 48px' }}
+          />
+        ))}
+        <text x={cx} y={cy - 4} textAnchor="middle" fill="white" fontSize="16" fontWeight="bold">{total}</text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fill="#64748b" fontSize="9">案件</text>
+      </svg>
+      <div className="space-y-1.5">
+        {counts.map((g, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: g.color }} />
+            <span className="text-slate-400">{g.label}</span>
+            <span className="text-white font-medium ml-auto pl-3">{g.count}件</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProfitBars({ deals }: { deals: Deal[] }) {
+  // 直近6ヶ月の確定利益
+  const now = new Date()
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
+    return { label: `${d.getMonth() + 1}月`, year: d.getFullYear(), month: d.getMonth() }
+  })
+  const profits = months.map(m => {
+    const sum = deals
+      .filter(d => (d.status === '完了' || d.status === 'done') && d.created_at)
+      .filter(d => {
+        const dt = new Date(d.created_at)
+        return dt.getFullYear() === m.year && dt.getMonth() === m.month
+      })
+      .reduce((s, d) => s + (d.sell_price - d.buy_price), 0)
+    return { ...m, profit: sum }
+  })
+  const maxP = Math.max(...profits.map(p => p.profit), 1)
+  const barW = 28, gap = 8, totalW = (barW + gap) * 6 - gap, svgH = 80
+
+  return (
+    <div>
+      <div className="text-xs text-slate-500 mb-2">月別確定利益（直近6ヶ月）</div>
+      <svg width="100%" viewBox={`0 0 ${totalW} ${svgH + 20}`} style={{ overflow: 'visible' }}>
+        {profits.map((p, i) => {
+          const barH = p.profit > 0 ? Math.max(4, (p.profit / maxP) * svgH) : 2
+          const x = i * (barW + gap)
+          return (
+            <g key={i}>
+              <rect x={x} y={svgH - barH} width={barW} height={barH}
+                rx={4}
+                fill={p.profit > 0 ? '#34d399' : '#334155'}
+              />
+              <text x={x + barW / 2} y={svgH + 14} textAnchor="middle" fill="#64748b" fontSize="9">{p.label}</text>
+              {p.profit > 0 && (
+                <text x={x + barW / 2} y={svgH - barH - 4} textAnchor="middle" fill="#34d399" fontSize="8">
+                  {p.profit >= 10000 ? `${Math.round(p.profit / 1000)}k` : p.profit}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
 
 // ===== メインコンポーネント =====
 export default function Home() {
   const [tab, setTab] = useState<Tab>('radar')
+  const [prevTab, setPrevTab] = useState<PrevTab>('radar')
+  const [radarScanning, setRadarScanning] = useState(false)
   const [aiIdx, setAiIdx] = useState(0)
   const [notifCount, setNotifCount] = useState(2)
+  const [expandedFind, setExpandedFind] = useState<number | null>(null)
+  const [findEstimates, setFindEstimates] = useState<Record<number, { sell: string; memo: string }>>({})
 
   // 案件
   const [deals, setDeals] = useState<Deal[]>([])
@@ -90,6 +197,7 @@ export default function Home() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null)
   const [registerItem, setRegisterItem] = useState<typeof mockFinds[0] | null>(null)
+  const [registerSell, setRegisterSell] = useState('')
   const [form, setForm] = useState({ title: '', source: 'ヤフオク', buy_price: '', sell_price: '', status: '仕入中', memo: '', url: '' })
 
   // 為替
@@ -162,7 +270,6 @@ export default function Home() {
     const { data } = await supabase.from('kithul_stock').select('*').order('name')
     if (data && data.length > 0) setKithulStock(data)
     else {
-      // テーブルがない場合はローカル状態で管理
       setKithulStock([
         { id: '1', name: 'キトゥル・トリークル 500ml', stock: 0, unit: '本', price: 3500, notes: '' },
         { id: '2', name: 'キトゥル・トリークル 1L', stock: 0, unit: '本', price: 6000, notes: '' },
@@ -206,10 +313,16 @@ export default function Home() {
 
   const registerFromRadar = async (item: typeof mockFinds[0]) => {
     setSaving(true)
-    await supabase.from('deals').insert([{ title: item.title, source: item.site, buy_price: item.price, sell_price: 0, status: '仕入中', memo: '', url: item.url }])
+    const sell = Number(registerSell) || 0
+    await supabase.from('deals').insert([{
+      title: item.title, source: item.site,
+      buy_price: item.price, sell_price: sell,
+      status: '仕入中', memo: '', url: item.url
+    }])
     await fetchDeals()
     setSaving(false)
     setRegisterItem(null)
+    setRegisterSell('')
     setTab('inventory')
   }
 
@@ -227,7 +340,6 @@ export default function Home() {
 
   // ===== キトゥル操作 =====
   const saveKithul = async (id: string, newStock: number, newNotes: string) => {
-    // Supabase更新を試みる（テーブルがあれば）
     await supabase.from('kithul_stock').update({ stock: newStock, notes: newNotes, updated_at: new Date().toISOString() }).eq('id', id)
     setKithulStock(prev => prev.map(k => k.id === id ? { ...k, stock: newStock, notes: newNotes } : k))
     setEditingKithul(null)
@@ -245,11 +357,17 @@ export default function Home() {
             <span className="hidden sm:block text-xs text-slate-500">丹羽芳幸 ビジネス管理</span>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={() => setTab(tab === 'notifications' ? 'radar' : 'notifications')} className="relative">
+            <button onClick={() => {
+              if (tab === 'notifications') { setTab(prevTab) }
+              else { if (tab !== 'settings') setPrevTab(tab as PrevTab); setTab('notifications') }
+            }} className="relative">
               <Bell size={18} className={tab === 'notifications' ? 'text-sky-400' : 'text-slate-400 hover:text-sky-400'} />
               {notifCount > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full text-[9px] flex items-center justify-center">{notifCount}</span>}
             </button>
-            <button onClick={() => setTab(tab === 'settings' ? 'radar' : 'settings')} className={tab === 'settings' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'}>
+            <button onClick={() => {
+              if (tab === 'settings') { setTab(prevTab) }
+              else { if (tab !== 'notifications') setPrevTab(tab as PrevTab); setTab('settings') }
+            }} className={tab === 'settings' ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'}>
               <Settings size={18} />
             </button>
           </div>
@@ -285,7 +403,7 @@ export default function Home() {
                 { label: '為替レート更新', desc: 'LKR/JPY レートを毎時自動取得（exchangerate-api）', icon: '💱', toggle: true },
                 { label: 'AI提案通知', desc: 'Claude Haiku による毎日自動生成', icon: '🤖', toggle: true },
                 { label: 'レーダー巡回間隔', desc: '30分ごとに自動スキャン（GitHub Actions）', icon: '🔍' },
-                { label: 'バージョン', desc: 'NIWA Dashboard v0.3 · フル機能版', icon: 'ℹ️' },
+                { label: 'バージョン', desc: 'NIWA Dashboard v0.4 · フル機能版', icon: 'ℹ️' },
               ].map((s, i) => (
                 <div key={i} className="flex items-center gap-4 p-4">
                   <span className="text-xl">{s.icon}</span>
@@ -365,7 +483,9 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-white flex items-center gap-2"><Search size={16} className="text-sky-400" />新着仕入れ候補</h2>
-                  <button className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1"><RefreshCw size={12} /> 今すぐ巡回</button>
+                  <button onClick={async () => { setRadarScanning(true); await new Promise(r => setTimeout(r, 2000)); setRadarScanning(false) }} className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                    <RefreshCw size={12} className={radarScanning ? 'animate-spin' : ''} /> {radarScanning ? '巡回中...' : '今すぐ巡回'}
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {['ヤフオク', 'ジモティー', 'メルカリ', 'ラクマ', 'セカンドストリート'].map(site => (
@@ -374,40 +494,144 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                {mockFinds.map(item => (
-                  <div key={item.id} className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 card-hover flex items-center gap-4">
-                    <div className="text-3xl flex-shrink-0">{item.image}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`badge border text-[10px] ${siteColors[item.site] || ''}`}>{item.site}</span>
-                        {item.status === 'new' && <span className="badge badge-new">NEW</span>}
-                        <span className="text-xs text-slate-500">{item.time}</span>
+
+                {mockFinds.map(item => {
+                  const est = findEstimates[item.id]
+                  const sellVal = est?.sell ? Number(est.sell) : item.estimatedSell
+                  const profitVal = sellVal - item.price
+                  const marginPct = sellVal > 0 ? Math.round((profitVal / sellVal) * 100) : 0
+                  const isOpen = expandedFind === item.id
+
+                  return (
+                    <div key={item.id} className="bg-[#1e293b] border border-slate-800 rounded-xl overflow-hidden card-hover">
+                      {/* メイン行 */}
+                      <div className="flex items-center gap-4 p-4">
+                        <div className="text-3xl flex-shrink-0">{item.image}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`badge border text-[10px] ${siteColors[item.site] || ''}`}>{item.site}</span>
+                            {item.status === 'new' && <span className="badge badge-new">NEW</span>}
+                            <span className="text-xs text-slate-500">{item.time}</span>
+                          </div>
+                          <p className="text-sm text-slate-200 font-medium truncate">{item.title}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-base font-bold text-white">¥{item.price.toLocaleString()}</p>
+                            <span className="text-xs text-slate-600">→</span>
+                            <p className="text-base font-bold text-emerald-400">+¥{profitVal.toLocaleString()}<span className="text-xs font-normal text-slate-500 ml-1">({marginPct}%)</span></p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2 flex-shrink-0">
+                          <button onClick={() => window.open(item.url, '_blank')} className="bg-sky-500 hover:bg-sky-400 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                            <ExternalLink size={12} /> 見る
+                          </button>
+                          <button
+                            onClick={() => setExpandedFind(isOpen ? null : item.id)}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                          >
+                            登録 {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-200 font-medium truncate">{item.title}</p>
-                      <p className="text-lg font-bold text-white mt-1">¥{item.price.toLocaleString()}</p>
+
+                      {/* 展開パネル */}
+                      {isOpen && (
+                        <div className="border-t border-slate-700 bg-[#162032] p-4 space-y-3">
+                          <div className="text-xs text-sky-400 font-medium mb-2">📋 案件詳細を確認して登録</div>
+                          <div className="grid grid-cols-3 gap-3 text-center">
+                            <div className="bg-[#0f172a] rounded-lg p-2">
+                              <div className="text-xs text-slate-500 mb-1">仕入値</div>
+                              <div className="text-white font-bold">¥{item.price.toLocaleString()}</div>
+                            </div>
+                            <div className="bg-[#0f172a] rounded-lg p-2">
+                              <div className="text-xs text-slate-500 mb-1">売値（見込）</div>
+                              <input
+                                type="number"
+                                value={est?.sell ?? item.estimatedSell}
+                                onChange={e => setFindEstimates(prev => ({ ...prev, [item.id]: { ...prev[item.id], sell: e.target.value } }))}
+                                className="w-full bg-transparent text-emerald-400 font-bold text-center focus:outline-none border-b border-slate-600 focus:border-sky-400"
+                              />
+                            </div>
+                            <div className="bg-[#0f172a] rounded-lg p-2">
+                              <div className="text-xs text-slate-500 mb-1">予想利益</div>
+                              <div className={`font-bold ${profitVal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                ¥{profitVal.toLocaleString()}
+                              </div>
+                              <div className="text-xs text-slate-500">{marginPct}%</div>
+                            </div>
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="メモ（任意）"
+                            value={est?.memo ?? ''}
+                            onChange={e => setFindEstimates(prev => ({ ...prev, [item.id]: { ...prev[item.id], memo: e.target.value } }))}
+                            className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                          />
+                          <div className="flex gap-3">
+                            <button onClick={() => setExpandedFind(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 py-2 rounded-lg transition-colors text-sm">キャンセル</button>
+                            <button
+                              onClick={async () => {
+                                setSaving(true)
+                                const sell = est?.sell ? Number(est.sell) : item.estimatedSell
+                                await supabase.from('deals').insert([{
+                                  title: item.title, source: item.site,
+                                  buy_price: item.price, sell_price: sell,
+                                  status: '仕入中', memo: est?.memo || '', url: item.url
+                                }])
+                                await fetchDeals()
+                                setSaving(false)
+                                setExpandedFind(null)
+                                setTab('inventory')
+                              }}
+                              disabled={saving}
+                              className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                            >
+                              {saving ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                              案件として登録
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button onClick={() => window.open(item.url, '_blank')} className="bg-sky-500 hover:bg-sky-400 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
-                        <ExternalLink size={12} /> 見る
-                      </button>
-                      <button onClick={() => setRegisterItem(item)} className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
-                        登録
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
             {/* 在庫・案件 */}
             {tab === 'inventory' && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400" />案件一覧</h2>
                   <button onClick={() => { resetForm(); setEditingDeal(null); setShowAddModal(true) }} className="bg-emerald-500 hover:bg-emerald-400 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                     <Plus size={12} /> 新規登録
                   </button>
                 </div>
+
+                {/* グラフエリア */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* ドーナツ */}
+                  <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4">
+                    <div className="text-xs text-slate-400 font-medium mb-3">📊 案件ステータス分布</div>
+                    <ProfitDonut deals={deals} />
+                  </div>
+                  {/* 棒グラフ */}
+                  <div className="bg-[#1e293b] border border-emerald-500/20 rounded-xl p-4 glow-green">
+                    <div className="text-xs text-slate-400 font-medium mb-2">💴 月別確定利益</div>
+                    <ProfitBars deals={deals} />
+                    <div className="mt-2 pt-2 border-t border-slate-800 grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <div className="text-slate-500">確定累計</div>
+                        <div className="text-emerald-400 font-bold">¥{totalProfit.toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500">見込み</div>
+                        <div className="text-amber-400 font-bold">¥{pendingProfit.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 件数サマリ */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: '進行中案件', value: `${deals.filter(i => i.status !== '完了' && i.status !== 'done').length}件`, color: 'text-sky-400' },
@@ -420,6 +644,7 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+
                 {dealsLoading ? (
                   <div className="text-center py-8 text-slate-500"><RefreshCw size={20} className="animate-spin mx-auto mb-2" />読み込み中...</div>
                 ) : deals.length === 0 ? (
@@ -616,7 +841,7 @@ export default function Home() {
         )}
 
         <div className="text-center text-xs text-slate-700 pb-4">
-          NIWA Dashboard v0.3 · 最終更新: {new Date().toLocaleString('ja-JP')}
+          NIWA Dashboard v0.4 · 最終更新: {new Date().toLocaleString('ja-JP')}
         </div>
       </main>
 
@@ -677,32 +902,6 @@ export default function Home() {
                 {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 {saving ? '保存中...' : editingDeal ? '更新する' : '登録する'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* レーダー登録確認モーダル */}
-      {registerItem && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-[#1e293b] border border-slate-700 rounded-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b border-slate-800">
-              <h3 className="font-semibold text-white">案件として登録しますか？</h3>
-              <button onClick={() => setRegisterItem(null)} className="text-slate-500 hover:text-slate-300"><X size={20} /></button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="bg-[#0f172a] rounded-xl p-3">
-                <span className={`badge border text-[10px] ${siteColors[registerItem.site] || ''}`}>{registerItem.site}</span>
-                <p className="text-sm font-medium text-white mt-2">{registerItem.title}</p>
-                <p className="text-lg font-bold text-white mt-1">¥{registerItem.price.toLocaleString()}</p>
-              </div>
-              <p className="text-xs text-slate-500">「仕入中」ステータスで案件に登録されます。売値は後から編集できます。</p>
-              <div className="flex gap-3">
-                <button onClick={() => setRegisterItem(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-300 py-2.5 rounded-xl transition-colors text-sm">キャンセル</button>
-                <button onClick={() => registerFromRadar(registerItem)} disabled={saving} className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors text-sm flex items-center justify-center gap-2">
-                  {saving && <RefreshCw size={14} className="animate-spin" />}登録する
-                </button>
-              </div>
             </div>
           </div>
         </div>
