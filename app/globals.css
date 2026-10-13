@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0f172a;
+  --card: #1e293b;
+  --border: #334155;
+}
+
+body {
+  background-color: var(--bg);
+  color: #e2e8f0;
+  font-family: 'Inter', 'Noto Sans JP', sans-serif;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+.card-hover { transition: all 0.2s ease; }
+.card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(56, 189, 248, 0.1); }
+
+.glow-blue { box-shadow: 0 0 20px rgba(56, 189, 248, 0.15); }
+.glow-green { box-shadow: 0 0 20px rgba(52, 211, 153, 0.15); }
+.glow-orange { box-shadow: 0 0 20px rgba(251, 146, 60, 0.15); }
+
+.badge { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium; }
+.badge-new { @apply bg-sky-500/20 text-sky-400 border border-sky-500/30; }
+.badge-progress { @apply bg-amber-500/20 text-amber-400 border border-amber-500/30; }
+.badge-done { @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30; }
+.badge-alert { @apply bg-red-500/20 text-red-400 border border-red-500/30; }
+
+.pulse-dot::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+  margin-right: 6px;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
