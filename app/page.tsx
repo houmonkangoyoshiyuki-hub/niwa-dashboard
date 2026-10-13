@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   Search, Package, TrendingUp, Leaf, Bell, Settings,
   ChevronRight, ExternalLink, BarChart3, Globe, RefreshCw, Star, X, Plus,
-  Edit2, Trash2, Save, Zap, ChevronDown, ChevronUp
+  Edit2, Trash2, Save, Zap, ChevronDown, ChevronUp, ShoppingBag, Copy, Check, MessageCircle
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -36,6 +36,36 @@ interface Deal {
   claim_note?: string                     // クレーム内容
   sell_price_lkr?: number                 // スリランカ実売値(LKR)
   photo_url?: string                      // 販売サイト用写真URL
+}
+
+// listings テーブル型
+interface Listing {
+  id: string
+  created_at: string
+  deal_id?: string
+  title: string
+  description: string
+  condition: 'like_new' | 'good' | 'fair' | 'parts'
+  photo_url: string
+  price_jpy: number
+  cost_jpy: number
+  price_lkr: number
+  status: 'listed' | 'negotiating' | 'sold' | 'cancelled'
+  sold_at?: string
+  sold_price_lkr: number
+  buyer_name: string
+  route: 'personal' | 'bulk'
+  memo: string
+}
+
+interface ListingInquiry {
+  id: string
+  created_at: string
+  listing_id: string
+  inquirer: string
+  offered_price_lkr: number
+  note: string
+  result: 'pending' | 'accepted' | 'rejected'
 }
 
 interface KithulItem {
@@ -304,6 +334,36 @@ export default function Home() {
   const [kithulLoading, setKithulLoading] = useState(true)
   const [editingKithul, setEditingKithul] = useState<string | null>(null)
 
+  // 出品管理
+  const [listings, setListings] = useState<Listing[]>([])
+  const [listingsLoading, setListingsLoading] = useState(true)
+  const [showListingModal, setShowListingModal] = useState(false)
+  const [editingListing, setEditingListing] = useState<Listing | null>(null)
+  const [listingFilterStatus, setListingFilterStatus] = useState<'all' | 'listed' | 'negotiating' | 'sold'>('all')
+  const [expandedListing, setExpandedListing] = useState<string | null>(null)
+  const [inquiries, setInquiries] = useState<Record<string, ListingInquiry[]>>({})
+  const [showInquiryForm, setShowInquiryForm] = useState<string | null>(null)
+  const [inquiryForm, setInquiryForm] = useState({ inquirer: '', offered_price_lkr: '', note: '' })
+  const [listingForm, setListingForm] = useState({
+    deal_id: '',
+    title: '',
+    description: '',
+    condition: 'good' as Listing['condition'],
+    photo_url: '',
+    price_jpy: '',
+    cost_jpy: '',
+    price_lkr: '',
+    status: 'listed' as Listing['status'],
+    sold_price_lkr: '',
+    buyer_name: '',
+    route: 'personal' as 'personal' | 'bulk',
+    memo: '',
+  })
+  const [listingSaving, setListingSaving] = useState(false)
+  const [generatingPost, setGeneratingPost] = useState<string | null>(null)
+  const [listingPost, setListingPost] = useState<Record<string, string>>({})
+  const [copiedListing, setCopiedListing] = useState<string | null>(null)
+
   // 販売ページ生成
   const [exportForm, setExportForm] = useState({
     imageUrl: '',
@@ -384,6 +444,168 @@ ${descEn}
     }
   }
 
+  // ===== 出品操作 =====
+  const fetchListings = useCallback(async () => {
+    setListingsLoading(true)
+    const { data } = await supabase.from('listings').select('*').order('created_at', { ascending: false })
+    if (data) setListings(data)
+    setListingsLoading(false)
+  }, [])
+
+  const resetListingForm = () => setListingForm({
+    deal_id: '', title: '', description: '', condition: 'good',
+    photo_url: '', price_jpy: '', cost_jpy: '', price_lkr: '',
+    status: 'listed', sold_price_lkr: '', buyer_name: '', route: 'personal', memo: '',
+  })
+
+  const saveListing = async () => {
+    if (!listingForm.title) return
+    setListingSaving(true)
+    const payload = {
+      deal_id: listingForm.deal_id || null,
+      title: listingForm.title,
+      description: listingForm.description,
+      condition: listingForm.condition,
+      photo_url: listingForm.photo_url,
+      price_jpy: Number(listingForm.price_jpy) || 0,
+      cost_jpy: Number(listingForm.cost_jpy) || 0,
+      price_lkr: Number(listingForm.price_lkr) || 0,
+      status: listingForm.status,
+      sold_price_lkr: Number(listingForm.sold_price_lkr) || 0,
+      buyer_name: listingForm.buyer_name,
+      route: listingForm.route,
+      memo: listingForm.memo,
+    }
+    if (editingListing) {
+      await supabase.from('listings').update(payload).eq('id', editingListing.id)
+    } else {
+      await supabase.from('listings').insert([payload])
+    }
+    await fetchListings()
+    setListingSaving(false)
+    setShowListingModal(false)
+    setEditingListing(null)
+    resetListingForm()
+  }
+
+  const deleteListing = async (id: string) => {
+    if (!confirm('この出品を削除しますか？')) return
+    await supabase.from('listings').delete().eq('id', id)
+    await fetchListings()
+  }
+
+  const startEditListing = (l: Listing) => {
+    setEditingListing(l)
+    setListingForm({
+      deal_id: l.deal_id || '',
+      title: l.title,
+      description: l.description,
+      condition: l.condition,
+      photo_url: l.photo_url,
+      price_jpy: String(l.price_jpy),
+      cost_jpy: String(l.cost_jpy),
+      price_lkr: String(l.price_lkr),
+      status: l.status,
+      sold_price_lkr: String(l.sold_price_lkr),
+      buyer_name: l.buyer_name,
+      route: l.route,
+      memo: l.memo,
+    })
+    setShowListingModal(true)
+  }
+
+  // 案件から出品へ昇格
+  const listFromDeal = (deal: Deal) => {
+    const calc = calcExport(deal.buy_price, costs)
+    setEditingListing(null)
+    setListingForm({
+      deal_id: deal.id,
+      title: deal.title,
+      description: deal.memo || '',
+      condition: 'good',
+      photo_url: deal.photo_url || '',
+      price_jpy: String(deal.sell_price || calc.recommendedSell),
+      cost_jpy: String(deal.buy_price + calc.fixedCosts),
+      price_lkr: String(deal.sell_price_lkr || Math.round((deal.sell_price || calc.recommendedSell) / (rates.lkr || 0.44))),
+      status: 'listed',
+      sold_price_lkr: '',
+      buyer_name: '',
+      route: deal.buyer_type === 'business' ? 'bulk' : 'personal',
+      memo: '',
+    })
+    setShowListingModal(true)
+    setTab('export')
+  }
+
+  // 出品からFB投稿生成
+  const generateListingPost = async (listing: Listing) => {
+    setGeneratingPost(listing.id)
+    try {
+      const [titleEn, descEn] = await Promise.all([
+        translateToEn(listing.title),
+        translateToEn(listing.description),
+      ])
+      const condMap: Record<string, string> = { like_new: 'Like New', good: 'Good Condition', fair: 'Used - Fair', parts: 'For Parts' }
+      const cond = condMap[listing.condition] || 'Good Condition'
+      const priceLkr = listing.price_lkr || Math.round(listing.price_jpy / (rates.lkr || 0.44))
+      let post = ''
+      if (listing.route === 'personal') {
+        post = `🇯🇵 Japanese Quality Medical Equipment for Sale! 🇯🇵
+
+📦 ${titleEn}
+✅ Condition: ${cond}
+💴 Price: LKR ${priceLkr.toLocaleString()} (¥${listing.price_jpy.toLocaleString()})
+
+${descEn}
+
+🌟 WHY BUY JAPANESE?
+• Strict quality standards & Long-lasting durability
+• Hard to find in Sri Lanka
+
+📩 DM to order | Delivery within 4-6 weeks
+#JapaneseMedicalEquipment #SriLanka #Japan`
+      } else {
+        post = `🏥 Bulk Order Available – Japanese Medical Equipment 🏥
+
+📦 ${titleEn}
+✅ Condition: ${cond}
+💴 Unit Price: LKR ${priceLkr.toLocaleString()} / ¥${listing.price_jpy.toLocaleString()}
+
+${descEn}
+
+✈️ Direct import from Japan
+⏱ Lead time: 4-6 weeks after order confirmation
+📋 Bulk discount available for large orders
+
+📩 Contact for quotation
+#MedicalEquipmentSriLanka #BulkOrder #JapanImport`
+      }
+      setListingPost(prev => ({ ...prev, [listing.id]: post }))
+    } finally {
+      setGeneratingPost(null)
+    }
+  }
+
+  // 問い合わせ取得
+  const fetchInquiries = async (listingId: string) => {
+    const { data } = await supabase.from('listing_inquiries').select('*').eq('listing_id', listingId).order('created_at', { ascending: false })
+    if (data) setInquiries(prev => ({ ...prev, [listingId]: data }))
+  }
+
+  const saveInquiry = async (listingId: string) => {
+    if (!inquiryForm.inquirer) return
+    await supabase.from('listing_inquiries').insert([{
+      listing_id: listingId,
+      inquirer: inquiryForm.inquirer,
+      offered_price_lkr: Number(inquiryForm.offered_price_lkr) || 0,
+      note: inquiryForm.note,
+      result: 'pending',
+    }])
+    await fetchInquiries(listingId)
+    setInquiryForm({ inquirer: '', offered_price_lkr: '', note: '' })
+    setShowInquiryForm(null)
+  }
+
   // ===== データ取得 =====
   const fetchDeals = useCallback(async () => {
     setDealsLoading(true)
@@ -447,7 +669,8 @@ ${descEn}
     fetchNews()
     fetchAiTips()
     fetchKithul()
-  }, [fetchDeals, fetchRates, fetchNews, fetchAiTips, fetchKithul])
+    fetchListings()
+  }, [fetchDeals, fetchRates, fetchNews, fetchAiTips, fetchKithul, fetchListings])
 
   // ===== 集計 =====
   const totalProfit = deals.filter(i => i.status === '完了' || i.status === 'done').reduce((s, i) => s + (i.sell_price - i.buy_price), 0)
@@ -996,6 +1219,7 @@ ${descEn}
                           )}
                         </div>
                         <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => listFromDeal(item)} title="出品する" className="text-slate-500 hover:text-emerald-400 p-1.5 rounded transition-colors"><ShoppingBag size={14} /></button>
                           <button onClick={() => startEdit(item)} className="text-slate-500 hover:text-sky-400 p-1.5 rounded transition-colors"><Edit2 size={14} /></button>
                           <button onClick={() => deleteDeal(item.id)} className="text-slate-500 hover:text-red-400 p-1.5 rounded transition-colors"><Trash2 size={14} /></button>
                         </div>
@@ -1165,107 +1389,235 @@ ${descEn}
               </div>
             )}
 
-            {/* 販売ページ生成タブ */}
+            {/* 販売管理タブ v1.0 */}
             {tab === 'export' && (
               <div className="space-y-4">
-                <h2 className="font-semibold text-white flex items-center gap-2"><Globe size={16} className="text-sky-400" />スリランカ向け販売ページ生成</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold text-white flex items-center gap-2"><ShoppingBag size={16} className="text-emerald-400" />出品管理</h2>
+                  <button onClick={() => { resetListingForm(); setEditingListing(null); setShowListingModal(true) }}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-white text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                    <Plus size={12} /> 新規出品
+                  </button>
+                </div>
 
-                {/* ルート選択 */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* 販売サマリー */}
+                {(() => {
+                  const listedCount = listings.filter(l => l.status === 'listed').length
+                  const negotiatingCount = listings.filter(l => l.status === 'negotiating').length
+                  const soldCount = listings.filter(l => l.status === 'sold').length
+                  const totalSoldLkr = listings.filter(l => l.status === 'sold').reduce((s, l) => s + (l.sold_price_lkr || l.price_lkr), 0)
+                  const totalSoldJpy = Math.round(totalSoldLkr * (rates.lkr || 0.44))
+                  const totalProfitLkr = listings.filter(l => l.status === 'sold').reduce((s, l) => {
+                    const sold = l.sold_price_lkr || l.price_lkr
+                    const cost = Math.round(l.cost_jpy / (rates.lkr || 0.44))
+                    return s + sold - cost
+                  }, 0)
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: '出品中', value: `${listedCount}件`, color: 'text-sky-400', border: 'border-sky-500/20' },
+                        { label: '商談中', value: `${negotiatingCount}件`, color: 'text-amber-400', border: 'border-amber-500/20' },
+                        { label: '売却済み', value: `${soldCount}件`, color: 'text-emerald-400', border: 'border-emerald-500/20' },
+                        { label: '累計利益', value: `LKR ${totalProfitLkr.toLocaleString()}`, color: 'text-purple-400', border: 'border-purple-500/20' },
+                      ].map((s, i) => (
+                        <div key={i} className={`bg-[#1e293b] border ${s.border} rounded-xl p-3 text-center`}>
+                          <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+                          <div className="text-xs text-slate-500 mt-1">{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* ステータスフィルター */}
+                <div className="flex gap-1 bg-[#1e293b] rounded-xl p-1">
                   {([
-                    { key: 'personal', label: '👤 個人販売ルート', desc: 'Facebook/個人向け' },
-                    { key: 'bulk',     label: '🏥 バラ姉まとめ発注', desc: 'ロット・法人向け' },
-                  ] as const).map(r => (
-                    <button key={r.key} onClick={() => setExportForm(f => ({ ...f, route: r.key }))}
-                      className={`p-3 rounded-xl border text-left transition-all ${exportForm.route === r.key ? 'border-sky-500 bg-sky-500/10' : 'border-slate-700 bg-[#1e293b]'}`}>
-                      <div className="text-sm font-medium text-white">{r.label}</div>
-                      <div className="text-xs text-slate-400 mt-0.5">{r.desc}</div>
+                    { id: 'all', label: '全て' },
+                    { id: 'listed', label: '🟢 出品中' },
+                    { id: 'negotiating', label: '🟡 商談中' },
+                    { id: 'sold', label: '✅ 売却済み' },
+                  ] as const).map(f => (
+                    <button key={f.id} onClick={() => setListingFilterStatus(f.id)}
+                      className={`flex-1 py-1.5 px-1 rounded-lg text-xs font-medium transition-all ${listingFilterStatus === f.id ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                      {f.label}
                     </button>
                   ))}
                 </div>
 
-                {/* 商品情報入力 */}
-                <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 space-y-3">
-                  <div className="text-xs text-sky-400 font-medium">📝 商品情報（日本語で入力）</div>
-
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">画像URL（ヤフオク等の画像リンク）</label>
-                    <input type="url" value={exportForm.imageUrl} onChange={e => setExportForm(f => ({ ...f, imageUrl: e.target.value }))}
-                      placeholder="https://..." className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
-                    {exportForm.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={exportForm.imageUrl} alt="preview" className="mt-2 w-full max-h-40 object-contain rounded-lg bg-slate-900" onError={e => (e.currentTarget.style.display = 'none')} />
-                    )}
+                {/* 出品一覧 */}
+                {listingsLoading ? (
+                  <div className="text-center py-8 text-slate-500"><RefreshCw size={20} className="animate-spin mx-auto mb-2" />読み込み中...</div>
+                ) : listings.filter(l => listingFilterStatus === 'all' || l.status === listingFilterStatus).length === 0 ? (
+                  <div className="bg-[#1e293b] border border-slate-800 rounded-xl p-8 text-center text-slate-500">
+                    <ShoppingBag size={32} className="mx-auto mb-3 text-slate-700" />
+                    <p className="text-sm">出品がありません</p>
+                    <p className="text-xs mt-1">「新規出品」または案件カードの <ShoppingBag size={11} className="inline" /> アイコンから出品できます</p>
                   </div>
+                ) : listings.filter(l => listingFilterStatus === 'all' || l.status === listingFilterStatus).map(listing => {
+                  const isExpanded = expandedListing === listing.id
+                  const post = listingPost[listing.id]
+                  const listInq = inquiries[listing.id] || []
+                  const statusColors = {
+                    listed: 'bg-sky-500/20 text-sky-400 border-sky-500/30',
+                    negotiating: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+                    sold: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+                    cancelled: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+                  }
+                  const statusLabel2 = { listed: '出品中', negotiating: '商談中', sold: '売却済み', cancelled: 'キャンセル' }
+                  const profitLkr = (listing.sold_price_lkr || listing.price_lkr) - Math.round(listing.cost_jpy / (rates.lkr || 0.44))
 
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">商品名（日本語）</label>
-                    <input type="text" value={exportForm.titleJa} onChange={e => setExportForm(f => ({ ...f, titleJa: e.target.value }))}
-                      placeholder="例: 電動車椅子 YAMAHA JWX-2 動作良好" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
-                  </div>
+                  return (
+                    <div key={listing.id} className="bg-[#1e293b] border border-slate-800 rounded-xl overflow-hidden card-hover">
+                      {/* メイン */}
+                      <div className="p-4">
+                        <div className="flex gap-3">
+                          {/* 写真 */}
+                          {listing.photo_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={listing.photo_url} alt="" className="w-16 h-16 object-cover rounded-lg flex-shrink-0 bg-slate-900" onError={e => (e.currentTarget.style.display='none')} />
+                          ) : (
+                            <div className="w-16 h-16 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0 text-2xl">📦</div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start gap-2 mb-1">
+                              <span className={`badge border text-[10px] ${statusColors[listing.status]}`}>{statusLabel2[listing.status]}</span>
+                              <span className="badge border text-[10px] bg-slate-500/20 text-slate-400 border-slate-500/30">{listing.route === 'personal' ? '👤 個人' : '🏥 一括'}</span>
+                            </div>
+                            <p className="text-sm font-medium text-white truncate">{listing.title}</p>
+                            <div className="flex items-center gap-3 mt-1 text-xs">
+                              <span className="text-slate-400">LKR {listing.price_lkr.toLocaleString()}</span>
+                              <span className="text-slate-600">/ ¥{listing.price_jpy.toLocaleString()}</span>
+                              {listing.status === 'sold' && (
+                                <span className={`font-bold ${profitLkr >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  利益 LKR {profitLkr.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1 flex-shrink-0">
+                            <button onClick={() => startEditListing(listing)} className="text-slate-500 hover:text-sky-400 p-1 rounded"><Edit2 size={13} /></button>
+                            <button onClick={() => deleteListing(listing.id)} className="text-slate-500 hover:text-red-400 p-1 rounded"><Trash2 size={13} /></button>
+                            <button onClick={() => {
+                              if (!isExpanded) fetchInquiries(listing.id)
+                              setExpandedListing(isExpanded ? null : listing.id)
+                            }} className="text-slate-500 hover:text-emerald-400 p-1 rounded">
+                              {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
+                          </div>
+                        </div>
 
-                  <div>
-                    <label className="text-xs text-slate-400 mb-1 block">説明（日本語）</label>
-                    <textarea value={exportForm.descJa} onChange={e => setExportForm(f => ({ ...f, descJa: e.target.value }))} rows={3}
-                      placeholder="例: 使用回数少なく状態は良好です。折りたたみ可能で収納・輸送に便利です。" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none" />
-                  </div>
+                        {/* ステータス変更ショートカット */}
+                        {listing.status !== 'sold' && (
+                          <div className="flex gap-2 mt-3">
+                            {listing.status === 'listed' && (
+                              <button onClick={async () => {
+                                await supabase.from('listings').update({ status: 'negotiating' }).eq('id', listing.id)
+                                await fetchListings()
+                              }} className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-1 rounded-lg hover:bg-amber-500/30 transition-colors">
+                                → 商談中に変更
+                              </button>
+                            )}
+                            {(listing.status === 'listed' || listing.status === 'negotiating') && (
+                              <button onClick={async () => {
+                                await supabase.from('listings').update({ status: 'sold', sold_at: new Date().toISOString() }).eq('id', listing.id)
+                                await fetchListings()
+                              }} className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-1 rounded-lg hover:bg-emerald-500/30 transition-colors">
+                                ✅ 売却完了
+                              </button>
+                            )}
+                            {/* FB投稿生成ボタン */}
+                            <button onClick={() => generateListingPost(listing)} disabled={generatingPost === listing.id}
+                              className="text-xs bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-1 rounded-lg hover:bg-sky-500/30 transition-colors flex items-center gap-1">
+                              {generatingPost === listing.id ? <RefreshCw size={10} className="animate-spin" /> : <Globe size={10} />}
+                              FB投稿生成
+                            </button>
+                          </div>
+                        )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">販売価格（円）</label>
-                      <input type="number" value={exportForm.priceJpy} onChange={e => setExportForm(f => ({ ...f, priceJpy: e.target.value }))}
-                        placeholder="85000" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
-                      {exportForm.priceJpy && <div className="text-xs text-amber-400 mt-1">≈ LKR {Math.round(Number(exportForm.priceJpy) / (rates.lkr || 0.44)).toLocaleString()}</div>}
+                        {/* FB投稿文表示 */}
+                        {post && (
+                          <div className="mt-3 bg-[#0f172a] rounded-lg p-3 relative">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-emerald-400">✅ Facebook投稿文</span>
+                              <button onClick={() => {
+                                navigator.clipboard.writeText(post)
+                                setCopiedListing(listing.id)
+                                setTimeout(() => setCopiedListing(null), 2000)
+                              }} className={`text-xs flex items-center gap-1 px-2 py-0.5 rounded transition-colors ${copiedListing === listing.id ? 'text-emerald-400' : 'text-slate-400 hover:text-white'}`}>
+                                {copiedListing === listing.id ? <><Check size={11} /> コピー済み</> : <><Copy size={11} /> コピー</>}
+                              </button>
+                            </div>
+                            <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">{post}</pre>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 展開：問い合わせ履歴 */}
+                      {isExpanded && (
+                        <div className="border-t border-slate-700 bg-[#162032] p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-sky-400 font-medium flex items-center gap-1"><MessageCircle size={12} /> 問い合わせ履歴</div>
+                            <button onClick={() => setShowInquiryForm(showInquiryForm === listing.id ? null : listing.id)}
+                              className="text-xs bg-sky-500/20 text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-lg">
+                              + 追加
+                            </button>
+                          </div>
+
+                          {showInquiryForm === listing.id && (
+                            <div className="bg-[#0f172a] rounded-lg p-3 space-y-2">
+                              <input type="text" value={inquiryForm.inquirer} onChange={e => setInquiryForm(f => ({ ...f, inquirer: e.target.value }))}
+                                placeholder="問い合わせ者名" className="w-full bg-[#1e293b] border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                              <input type="number" value={inquiryForm.offered_price_lkr} onChange={e => setInquiryForm(f => ({ ...f, offered_price_lkr: e.target.value }))}
+                                placeholder="提示価格（LKR）" className="w-full bg-[#1e293b] border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                              <input type="text" value={inquiryForm.note} onChange={e => setInquiryForm(f => ({ ...f, note: e.target.value }))}
+                                placeholder="内容メモ" className="w-full bg-[#1e293b] border border-slate-700 rounded px-2 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                              <div className="flex gap-2">
+                                <button onClick={() => setShowInquiryForm(null)} className="flex-1 bg-slate-700 text-slate-300 text-xs py-1.5 rounded">キャンセル</button>
+                                <button onClick={() => saveInquiry(listing.id)} className="flex-1 bg-sky-500 text-white text-xs py-1.5 rounded">保存</button>
+                              </div>
+                            </div>
+                          )}
+
+                          {listInq.length === 0 ? (
+                            <p className="text-xs text-slate-600">問い合わせ記録なし</p>
+                          ) : listInq.map(inq => (
+                            <div key={inq.id} className="bg-[#0f172a] rounded-lg p-3 text-xs space-y-1">
+                              <div className="flex justify-between">
+                                <span className="text-white font-medium">{inq.inquirer}</span>
+                                <span className="text-slate-500">{new Date(inq.created_at).toLocaleDateString('ja-JP')}</span>
+                              </div>
+                              {inq.offered_price_lkr > 0 && <div className="text-amber-400">提示: LKR {inq.offered_price_lkr.toLocaleString()}</div>}
+                              {inq.note && <div className="text-slate-400">{inq.note}</div>}
+                              <div className="flex gap-2 pt-1">
+                                {(['accepted', 'rejected', 'pending'] as const).map(r => (
+                                  <button key={r} onClick={async () => {
+                                    await supabase.from('listing_inquiries').update({ result: r }).eq('id', inq.id)
+                                    await fetchInquiries(listing.id)
+                                  }} className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
+                                    inq.result === r
+                                      ? r === 'accepted' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                                        : r === 'rejected' ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                                        : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                                      : 'border-slate-700 text-slate-600 hover:text-slate-400'
+                                  }`}>
+                                    {r === 'accepted' ? '✅ 成約' : r === 'rejected' ? '❌ 不成立' : '⏳ 保留'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">状態</label>
-                      <select value={exportForm.condition} onChange={e => setExportForm(f => ({ ...f, condition: e.target.value }))}
-                        className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
-                        {['新品同様', '良好', '使用感あり', 'ジャンク'].map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {exportForm.route === 'bulk' && (
-                    <div>
-                      <label className="text-xs text-slate-400 mb-1 block">最低発注数（台）</label>
-                      <input type="number" value={exportForm.bulkMin} onChange={e => setExportForm(f => ({ ...f, bulkMin: e.target.value }))}
-                        className="w-32 bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500" />
-                    </div>
-                  )}
-
-                  <button onClick={generateExportPost} disabled={!exportForm.titleJa || exportLoading}
-                    className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
-                    {exportLoading ? <><RefreshCw size={16} className="animate-spin" /> 翻訳中...</> : <><Globe size={16} /> 英語投稿文を生成</>}
-                  </button>
-                </div>
-
-                {/* 生成結果 */}
-                {exportResult && (
-                  <div className="bg-[#1e293b] border border-emerald-500/30 rounded-xl p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-emerald-400 font-medium">✅ 生成完了 · Facebook投稿用</div>
-                      <button onClick={() => {
-                        navigator.clipboard.writeText(exportResult.post)
-                        setCopied(true)
-                        setTimeout(() => setCopied(false), 2000)
-                      }} className={`text-xs px-3 py-1 rounded-lg transition-colors ${copied ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}>
-                        {copied ? '✓ コピー済み' : 'コピー'}
-                      </button>
-                    </div>
-                    <pre className="text-sm text-slate-200 whitespace-pre-wrap font-sans bg-[#0f172a] rounded-lg p-3 leading-relaxed">{exportResult.post}</pre>
-                    <div className="text-xs text-slate-500">
-                      ※ 為替レート: ¥1 ≈ LKR {(1 / (rates.lkr || 0.44)).toFixed(1)} · 翻訳はGoogle翻訳を使用
-                    </div>
-                  </div>
-                )}
+                  )
+                })}
               </div>
             )}
           </>
         )}
 
         <div className="text-center text-xs text-slate-700 pb-4">
-          NIWA Dashboard v0.9 · 最終更新: {new Date().toLocaleString('ja-JP')}
+          NIWA Dashboard v1.0 · 最終更新: {new Date().toLocaleString('ja-JP')}
         </div>
       </main>
 
@@ -1410,6 +1762,148 @@ ${descEn}
               <button onClick={saveDeal} disabled={!form.title || saving} className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
                 {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 {saving ? '保存中...' : editingDeal ? '更新する' : '登録する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 出品登録モーダル */}
+      {showListingModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-[#1e293b] border border-slate-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <ShoppingBag size={16} className="text-emerald-400" />
+                {editingListing ? '出品情報を編集' : '新規出品登録'}
+              </h3>
+              <button onClick={() => { setShowListingModal(false); setEditingListing(null); resetListingForm() }} className="text-slate-500 hover:text-slate-300"><X size={20} /></button>
+            </div>
+            <div className="p-4 space-y-3">
+
+              {/* タイトル */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">商品タイトル *</label>
+                <input type="text" value={listingForm.title} onChange={e => setListingForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="例: 電動車椅子 YAMAHA JWX-2（良品）" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+              </div>
+
+              {/* 説明文 */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">説明文（英語でFB投稿に使われます）</label>
+                <textarea value={listingForm.description} onChange={e => setListingForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="商品の状態、特徴など（日本語OK、自動翻訳されます）" rows={3}
+                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none" />
+              </div>
+
+              {/* コンディション & ルート */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">コンディション</label>
+                  <select value={listingForm.condition} onChange={e => setListingForm(f => ({ ...f, condition: e.target.value }))}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                    <option value="like_new">✨ 美品</option>
+                    <option value="good">👍 良品</option>
+                    <option value="fair">🔧 普通</option>
+                    <option value="parts">⚙️ パーツ用</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">販売ルート</label>
+                  <select value={listingForm.route} onChange={e => setListingForm(f => ({ ...f, route: e.target.value }))}
+                    className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-sky-500">
+                    <option value="personal">👤 個人出品</option>
+                    <option value="bulk">🏥 一括出品</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 写真URL */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">写真URL</label>
+                <input type="url" value={listingForm.photo_url} onChange={e => setListingForm(f => ({ ...f, photo_url: e.target.value }))}
+                  placeholder="https://..." className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                {listingForm.photo_url && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={listingForm.photo_url} alt="" className="mt-2 w-full h-32 object-cover rounded-lg bg-slate-900"
+                    onError={e => (e.currentTarget.style.display = 'none')} />
+                )}
+              </div>
+
+              {/* 価格 */}
+              <div className="border-t border-slate-700 pt-3">
+                <div className="text-xs text-sky-400 font-medium mb-2">💰 価格設定</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">売値 (¥)</label>
+                    <input type="number" value={listingForm.price_jpy} onChange={e => setListingForm(f => ({ ...f, price_jpy: e.target.value }))}
+                      placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">原価 (¥)</label>
+                    <input type="number" value={listingForm.cost_jpy} onChange={e => setListingForm(f => ({ ...f, cost_jpy: e.target.value }))}
+                      placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">LKR価格</label>
+                    <input type="number" value={listingForm.price_lkr} onChange={e => setListingForm(f => ({ ...f, price_lkr: e.target.value }))}
+                      placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+                </div>
+                {listingForm.price_lkr && listingForm.cost_jpy && rates.lkr && (
+                  <div className="mt-2 bg-[#0f172a] rounded-lg px-3 py-1.5 text-xs flex justify-between">
+                    <span className="text-slate-500">予想利益:</span>
+                    <span className={`font-bold ${Number(listingForm.price_lkr) - Math.round(Number(listingForm.cost_jpy) / rates.lkr) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      LKR {(Number(listingForm.price_lkr) - Math.round(Number(listingForm.cost_jpy) / rates.lkr)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* ステータス */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">ステータス</label>
+                <div className="flex gap-2">
+                  {([['listed','🟢 出品中'], ['negotiating','🟡 商談中'], ['sold','✅ 売却済み'], ['cancelled','⬛ 取消']] as const).map(([v, l]) => (
+                    <button key={v} onClick={() => setListingForm(f => ({ ...f, status: v }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs transition-colors ${listingForm.status === v ? 'bg-sky-500 text-white' : 'bg-[#0f172a] border border-slate-700 text-slate-400 hover:text-slate-200'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 売却済みの場合の追加フィールド */}
+              {listingForm.status === 'sold' && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 space-y-2">
+                  <div className="text-xs text-emerald-400 font-medium">✅ 売却情報</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">成約価格 (LKR)</label>
+                      <input type="number" value={listingForm.sold_price_lkr} onChange={e => setListingForm(f => ({ ...f, sold_price_lkr: e.target.value }))}
+                        placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400 mb-1 block">購入者名</label>
+                      <input type="text" value={listingForm.buyer_name} onChange={e => setListingForm(f => ({ ...f, buyer_name: e.target.value }))}
+                        placeholder="例: バラさん" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* メモ */}
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">メモ</label>
+                <textarea value={listingForm.memo} onChange={e => setListingForm(f => ({ ...f, memo: e.target.value }))}
+                  placeholder="備考など" rows={2}
+                  className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none" />
+              </div>
+
+              <button onClick={saveListing} disabled={!listingForm.title || listingSaving}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
+                {listingSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                {listingSaving ? '保存中...' : editingListing ? '更新する' : '出品登録する'}
               </button>
             </div>
           </div>
