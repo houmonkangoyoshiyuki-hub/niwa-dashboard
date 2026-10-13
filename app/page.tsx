@@ -24,6 +24,18 @@ interface Deal {
   memo: string
   url: string
   created_at: string
+  // 拡張フィールド（叔父さん提案・v0.9）
+  buyer_type?: 'personal' | 'business'   // 個人 or 業務
+  ordered_at?: string                     // 受注日
+  delivered_at?: string                   // 納品日
+  cost_estimate?: number                  // 見積コスト
+  cost_actual?: number                    // 実際コスト
+  irregular?: boolean                     // イレギュラー発生
+  irregular_note?: string                 // イレギュラー内容
+  claim?: boolean                         // クレーム発生
+  claim_note?: string                     // クレーム内容
+  sell_price_lkr?: number                 // スリランカ実売値(LKR)
+  photo_url?: string                      // 販売サイト用写真URL
 }
 
 interface KithulItem {
@@ -261,7 +273,14 @@ export default function Home() {
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null)
   const [registerItem, setRegisterItem] = useState<typeof mockFinds[0] | null>(null)
   const [registerSell, setRegisterSell] = useState('')
-  const [form, setForm] = useState({ title: '', source: 'ヤフオク', buy_price: '', sell_price: '', status: '仕入中', memo: '', url: '' })
+  const [form, setForm] = useState({ title: '', source: 'ヤフオク', buy_price: '', sell_price: '', status: '仕入中', memo: '', url: '',
+    buyer_type: 'personal' as 'personal' | 'business',
+    ordered_at: '', delivered_at: '',
+    cost_estimate: '', cost_actual: '',
+    irregular: false, irregular_note: '',
+    claim: false, claim_note: '',
+    sell_price_lkr: '', photo_url: '',
+  })
 
   // 為替
   const [rates, setRates] = useState({ lkr: 0.44, change: 0.02 })
@@ -435,7 +454,13 @@ ${descEn}
   const pendingProfit = deals.filter(i => i.status !== '完了' && i.status !== 'done').reduce((s, i) => s + (i.sell_price - i.buy_price), 0)
 
   // ===== 案件操作 =====
-  const resetForm = () => setForm({ title: '', source: 'ヤフオク', buy_price: '', sell_price: '', status: '仕入中', memo: '', url: '' })
+  const resetForm = () => setForm({ title: '', source: 'ヤフオク', buy_price: '', sell_price: '', status: '仕入中', memo: '', url: '',
+    buyer_type: 'personal', ordered_at: '', delivered_at: '',
+    cost_estimate: '', cost_actual: '',
+    irregular: false, irregular_note: '',
+    claim: false, claim_note: '',
+    sell_price_lkr: '', photo_url: '',
+  })
 
   const saveDeal = async () => {
     if (!form.title) return
@@ -444,6 +469,17 @@ ${descEn}
       title: form.title, source: form.source,
       buy_price: Number(form.buy_price) || 0, sell_price: Number(form.sell_price) || 0,
       status: form.status, memo: form.memo, url: form.url,
+      buyer_type: form.buyer_type,
+      ordered_at: form.ordered_at || null,
+      delivered_at: form.delivered_at || null,
+      cost_estimate: Number(form.cost_estimate) || 0,
+      cost_actual: Number(form.cost_actual) || 0,
+      irregular: form.irregular,
+      irregular_note: form.irregular_note,
+      claim: form.claim,
+      claim_note: form.claim_note,
+      sell_price_lkr: Number(form.sell_price_lkr) || 0,
+      photo_url: form.photo_url,
     }
     if (editingDeal) await supabase.from('deals').update(payload).eq('id', editingDeal.id)
     else await supabase.from('deals').insert([payload])
@@ -477,7 +513,19 @@ ${descEn}
 
   const startEdit = (deal: Deal) => {
     setEditingDeal(deal)
-    setForm({ title: deal.title, source: deal.source || 'ヤフオク', buy_price: String(deal.buy_price), sell_price: String(deal.sell_price), status: deal.status, memo: deal.memo || '', url: deal.url || '' })
+    setForm({ title: deal.title, source: deal.source || 'ヤフオク', buy_price: String(deal.buy_price), sell_price: String(deal.sell_price), status: deal.status, memo: deal.memo || '', url: deal.url || '',
+      buyer_type: deal.buyer_type || 'personal',
+      ordered_at: deal.ordered_at ? deal.ordered_at.slice(0, 10) : '',
+      delivered_at: deal.delivered_at ? deal.delivered_at.slice(0, 10) : '',
+      cost_estimate: String(deal.cost_estimate || ''),
+      cost_actual: String(deal.cost_actual || ''),
+      irregular: deal.irregular || false,
+      irregular_note: deal.irregular_note || '',
+      claim: deal.claim || false,
+      claim_note: deal.claim_note || '',
+      sell_price_lkr: String(deal.sell_price_lkr || ''),
+      photo_url: deal.photo_url || '',
+    })
     setShowAddModal(true)
   }
 
@@ -932,12 +980,20 @@ ${descEn}
                     <div key={item.id} className="bg-[#1e293b] border border-slate-800 rounded-xl p-4 card-hover">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className={st.cls}>{st.label}</span>
                             {item.source && <span className={`badge border text-[10px] ${siteColors[item.source] || 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>{item.source}</span>}
+                            {item.buyer_type === 'business' && <span className="badge border text-[10px] bg-purple-500/20 text-purple-400 border-purple-500/30">🏥 業務</span>}
+                            {item.irregular && <span className="badge border text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">⚠️ イレギュラー</span>}
+                            {item.claim && <span className="badge border text-[10px] bg-red-500/20 text-red-400 border-red-500/30">🚨 クレーム</span>}
                           </div>
                           <p className="font-medium text-white">{item.title}</p>
                           {item.memo && <p className="text-xs text-slate-500 mt-1">{item.memo}</p>}
+                          {item.ordered_at && item.delivered_at && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              リードタイム: {Math.round((new Date(item.delivered_at).getTime() - new Date(item.ordered_at).getTime()) / (1000*60*60*24))}日
+                            </p>
+                          )}
                         </div>
                         <div className="flex gap-1 flex-shrink-0">
                           <button onClick={() => startEdit(item)} className="text-slate-500 hover:text-sky-400 p-1.5 rounded transition-colors"><Edit2 size={14} /></button>
@@ -1209,7 +1265,7 @@ ${descEn}
         )}
 
         <div className="text-center text-xs text-slate-700 pb-4">
-          NIWA Dashboard v0.8 · 最終更新: {new Date().toLocaleString('ja-JP')}
+          NIWA Dashboard v0.9 · 最終更新: {new Date().toLocaleString('ja-JP')}
         </div>
       </main>
 
@@ -1266,6 +1322,91 @@ ${descEn}
                 <label className="text-xs text-slate-400 mb-1 block">URL</label>
                 <input type="text" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://..." className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
               </div>
+
+              {/* ===== 拡張フィールド（叔父さん提案） ===== */}
+              <div className="border-t border-slate-700 pt-3">
+                <div className="text-xs text-sky-400 font-medium mb-2">📊 販売実績データ</div>
+
+                {/* 利用区分 */}
+                <div className="mb-3">
+                  <label className="text-xs text-slate-400 mb-1 block">利用区分</label>
+                  <div className="flex gap-2">
+                    {([['personal','👤 個人'], ['business','🏥 業務']] as const).map(([v, l]) => (
+                      <button key={v} onClick={() => setForm(f => ({ ...f, buyer_type: v }))}
+                        className={`flex-1 py-1.5 rounded-lg text-xs transition-colors ${form.buyer_type === v ? 'bg-sky-500 text-white' : 'bg-[#0f172a] border border-slate-700 text-slate-400'}`}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 受注日・納品日 */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">受注日</label>
+                    <input type="date" value={form.ordered_at} onChange={e => setForm(f => ({ ...f, ordered_at: e.target.value }))} className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">納品日</label>
+                    <input type="date" value={form.delivered_at} onChange={e => setForm(f => ({ ...f, delivered_at: e.target.value }))} className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-sky-500" />
+                  </div>
+                </div>
+
+                {/* コスト予実 */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">コスト見積 (¥)</label>
+                    <input type="number" value={form.cost_estimate} onChange={e => setForm(f => ({ ...f, cost_estimate: e.target.value }))} placeholder="11000" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">コスト実績 (¥)</label>
+                    <input type="number" value={form.cost_actual} onChange={e => setForm(f => ({ ...f, cost_actual: e.target.value }))} placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-2 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                  </div>
+                </div>
+                {form.cost_estimate && form.cost_actual && (
+                  <div className="bg-[#0f172a] rounded px-3 py-1.5 text-xs mb-3">
+                    <span className="text-slate-500">予実差: </span>
+                    <span className={`font-bold ${Number(form.cost_actual) <= Number(form.cost_estimate) ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {Number(form.cost_actual) <= Number(form.cost_estimate) ? '▼' : '▲'}¥{Math.abs(Number(form.cost_actual) - Number(form.cost_estimate)).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+
+                {/* スリランカ実売値 */}
+                <div className="mb-3">
+                  <label className="text-xs text-slate-400 mb-1 block">スリランカ実売値 (LKR)</label>
+                  <input type="number" value={form.sell_price_lkr} onChange={e => setForm(f => ({ ...f, sell_price_lkr: e.target.value }))} placeholder="0" className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                </div>
+
+                {/* 写真URL */}
+                <div className="mb-3">
+                  <label className="text-xs text-slate-400 mb-1 block">販売写真URL</label>
+                  <input type="url" value={form.photo_url} onChange={e => setForm(f => ({ ...f, photo_url: e.target.value }))} placeholder="https://..." className="w-full bg-[#0f172a] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                </div>
+
+                {/* イレギュラー */}
+                <div className="mb-2">
+                  <label className="flex items-center gap-2 cursor-pointer mb-1">
+                    <input type="checkbox" checked={form.irregular} onChange={e => setForm(f => ({ ...f, irregular: e.target.checked }))} className="rounded" />
+                    <span className="text-xs text-amber-400">⚠️ イレギュラー発生</span>
+                  </label>
+                  {form.irregular && (
+                    <input type="text" value={form.irregular_note} onChange={e => setForm(f => ({ ...f, irregular_note: e.target.value }))} placeholder="例: 通関で1週間遅延" className="w-full bg-[#0f172a] border border-amber-500/40 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-400" />
+                  )}
+                </div>
+
+                {/* クレーム */}
+                <div className="mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer mb-1">
+                    <input type="checkbox" checked={form.claim} onChange={e => setForm(f => ({ ...f, claim: e.target.checked }))} className="rounded" />
+                    <span className="text-xs text-red-400">🚨 クレーム発生</span>
+                  </label>
+                  {form.claim && (
+                    <input type="text" value={form.claim_note} onChange={e => setForm(f => ({ ...f, claim_note: e.target.value }))} placeholder="例: 電動部分が動かないとの連絡" className="w-full bg-[#0f172a] border border-red-500/40 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-400" />
+                  )}
+                </div>
+              </div>
+
               <button onClick={saveDeal} disabled={!form.title || saving} className="w-full bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-white font-medium py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2">
                 {saving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 {saving ? '保存中...' : editingDeal ? '更新する' : '登録する'}
